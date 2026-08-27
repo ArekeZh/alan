@@ -410,7 +410,7 @@ export function useVoiceAssistant({
   startListeningRef.current = startListening;
 
   useEffect(() => {
-    const micIsOn = status === 'waiting' || status === 'listening';
+    const micIsOn = status === 'listening';
     setIsListening(micIsOn);
   }, [setIsListening, status]);
 
