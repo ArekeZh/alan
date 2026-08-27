@@ -9,7 +9,10 @@
     "scheme": "alan-math",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.alan.math"
+      "bundleIdentifier": "com.alan.math",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Қосымша микрофонды дауыстық командалар үшін пайдаланады."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,30 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Қосымша микрофонды дауыстық командалар үшін пайдаланады. / Приложению нужен микрофон для голосовых команд. / The app uses the microphone for voice commands."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Қосымша микрофонды дауыстық командалар үшін пайдаланады. / Приложению нужен микрофон для голосовых команд. / The app uses the microphone for voice commands.",
+          "speechRecognitionPermission": "Қосымша сөйлеуді тануды дауыстық командалар үшін пайдаланады. / Приложению нужно распознавание речи. / The app uses speech recognition for voice commands.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts"
+          ]
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Қосымша микрофонды дауыстық командалар үшін пайдаланады. / Приложению нужен микрофон для голосовых команд. / The app uses the microphone for voice commands."
+        }
+      ]
     ]
   }
 }

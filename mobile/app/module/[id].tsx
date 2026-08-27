@@ -1,20 +1,29 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CardButton } from '../../components/CardButton';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { colors, spacing, typography } from '../../constants/theme';
 import { getModule, getSectionsForModule } from '../../data/content';
+import { useLessonProgress } from '../../hooks/useLessonProgress';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 export default function ModuleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useLanguage();
+  const { setLastOpenedModule } = useLessonProgress();
 
   const module = getModule(id);
   const moduleSections = getSectionsForModule(id);
+
+  useEffect(() => {
+    if (id) {
+      setLastOpenedModule(id);
+    }
+  }, [id, setLastOpenedModule]);
 
   if (!module) {
     return null;

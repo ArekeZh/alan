@@ -12,10 +12,13 @@ import {
 import { LessonProgress } from '../types';
 
 const STORAGE_KEY = 'lesson_progress';
+const LAST_MODULE_KEY = 'last_opened_module';
 
 type ProgressContextValue = {
   isReady: boolean;
+  lastOpenedModuleId: string | null;
   markLessonComplete: (lessonId: string, score: number, total: number) => Promise<void>;
+  setLastOpenedModule: (moduleId: string) => Promise<void>;
   getLessonStatus: (lessonId: string) => LessonProgress[string] | undefined;
 };
 
@@ -23,13 +26,20 @@ const ProgressContext = createContext<ProgressContextValue | null>(null);
 
 export function ProgressProvider({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState<LessonProgress>({});
+  const [lastOpenedModuleId, setLastOpenedModuleId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (stored) {
-          setProgress(JSON.parse(stored) as LessonProgress);
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(LAST_MODULE_KEY),
+    ])
+      .then(([storedProgress, storedModule]) => {
+        if (storedProgress) {
+          setProgress(JSON.parse(storedProgress) as LessonProgress);
+        }
+        if (storedModule) {
+          setLastOpenedModuleId(storedModule);
         }
       })
       .finally(() => setIsReady(true));
@@ -54,9 +64,20 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     [progress],
   );
 
+  const setLastOpenedModule = useCallback(async (moduleId: string) => {
+    setLastOpenedModuleId(moduleId);
+    await AsyncStorage.setItem(LAST_MODULE_KEY, moduleId);
+  }, []);
+
   const value = useMemo(
-    () => ({ isReady, markLessonComplete, getLessonStatus }),
-    [isReady, markLessonComplete, getLessonStatus],
+    () => ({
+      isReady,
+      lastOpenedModuleId,
+      markLessonComplete,
+      setLastOpenedModule,
+      getLessonStatus,
+    }),
+    [isReady, lastOpenedModuleId, markLessonComplete, setLastOpenedModule, getLessonStatus],
   );
 
   return (
