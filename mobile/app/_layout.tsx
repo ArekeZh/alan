@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
 import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 import { ProgressProvider } from '../hooks/useLessonProgress';
+import { VoiceListeningProvider } from '../hooks/useVoiceListening';
+import { ListeningMicBadge } from '../components/ListeningMicBadge';
 
 function RootNavigator() {
   const { isReady } = useLanguage();
@@ -19,7 +21,7 @@ function RootNavigator() {
   }
 
   return (
-    <>
+    <View style={styles.root}>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -28,7 +30,8 @@ function RootNavigator() {
           animation: 'slide_from_right',
         }}
       />
-    </>
+      <ListeningMicBadge />
+    </View>
   );
 }
 
@@ -37,7 +40,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <LanguageProvider>
         <ProgressProvider>
-          <RootNavigator />
+          <VoiceListeningProvider>
+            <RootNavigator />
+          </VoiceListeningProvider>
         </ProgressProvider>
       </LanguageProvider>
     </SafeAreaProvider>
@@ -45,6 +50,9 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loading: {
     flex: 1,
     justifyContent: 'center',

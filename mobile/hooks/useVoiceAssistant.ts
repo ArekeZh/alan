@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
 
 import { useLanguage } from '../i18n/LanguageContext';
+import { useVoiceListening } from './useVoiceListening';
 import {
   deleteRecording,
   hasVoiceActivity,
@@ -76,6 +77,7 @@ export function useVoiceAssistant({
   enabled,
 }: UseVoiceAssistantOptions) {
   const { language, setLanguage, t } = useLanguage();
+  const { setIsListening } = useVoiceListening();
   const pathname = usePathname();
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [transcript, setTranscript] = useState('');
@@ -406,6 +408,15 @@ export function useVoiceAssistant({
   }, [isCurrent, resumeWakeListening, speak]);
 
   startListeningRef.current = startListening;
+
+  useEffect(() => {
+    const micIsOn = status === 'waiting' || status === 'listening';
+    setIsListening(micIsOn);
+  }, [setIsListening, status]);
+
+  useEffect(() => {
+    return () => setIsListening(false);
+  }, [setIsListening]);
 
   useEffect(() => {
     if (status === 'waiting' || status === 'listening') {

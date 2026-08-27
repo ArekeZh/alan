@@ -55,6 +55,7 @@ const translations: Record<Language, TranslationValue> = {
       askWhichLanguage: 'Қандай тілге ауыстырайын?',
       alreadyThisLanguage: 'Бұл тіл қазірдің өзінде таңдалған.',
       didNotUnderstandLanguage: 'Түсінбедім. Қазақша, орысша немесе ағылшынша деп айтыңыз.',
+      micOn: 'Микрофон қосулы. Көмекші тыңдап тұр.',
     },
     modules: {
       basicArithmetic: {
@@ -146,6 +147,7 @@ const translations: Record<Language, TranslationValue> = {
       askWhichLanguage: 'На какой язык переключить?',
       alreadyThisLanguage: 'Этот язык уже выбран.',
       didNotUnderstandLanguage: 'Не понял. Скажите: казахский, русский или английский.',
+      micOn: 'Микрофон включён. Помощник слушает.',
     },
     modules: {
       basicArithmetic: {
@@ -238,6 +240,7 @@ const translations: Record<Language, TranslationValue> = {
       askWhichLanguage: 'Which language should I switch to?',
       alreadyThisLanguage: 'This language is already selected.',
       didNotUnderstandLanguage: 'I did not understand. Say Kazakh, Russian, or English.',
+      micOn: 'Microphone is on. The assistant is listening.',
     },
     modules: {
       basicArithmetic: {
