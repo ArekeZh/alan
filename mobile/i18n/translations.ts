@@ -210,7 +210,7 @@ const translations: Record<Language, TranslationValue> = {
       greeting: 'Hello, friend! Ready to study math today?',
       progressNotStarted: 'You have not started a module yet. The first module is {{module}}.',
       progressAtModule: 'You stopped at the module {{module}}.',
-      askCommand: 'Say Alan. Then say: module kosh. Say artka to go back.',
+      askCommand: 'Say Alan. Then say open module. Say back to go back.',
       openingModule: 'Opening the first module.',
       onHomePage: 'This is the home page',
       speaking: 'Speaking',
@@ -218,13 +218,14 @@ const translations: Record<Language, TranslationValue> = {
       idle: 'Ready',
       waiting: 'Say Alan',
       heard: 'I heard',
-      didNotUnderstand: 'I did not understand. Say Alan. Module kosh. Or artka to go back.',
+      didNotUnderstand: 'I did not understand. Say Alan. Open module. Or say back.',
       repeat: 'Repeat greeting',
       listen: 'Listen',
       thinking: 'Recognizing',
-      error: 'Something went wrong. Check the internet and tap Listen.',
+      error: 'Something went wrong. Check the internet and try again.',
       micDenied: 'Please allow microphone access so voice commands can work.',
-      unavailable: 'SpeechKit key is missing. Open the module with the button on the screen.',
+      unavailable:
+        'Add a free Groq API key to .env for English voice commands. You can still open the module with the button on the screen.',
     },
     modules: {
       basicArithmetic: {
@@ -301,4 +302,4 @@ export function translate(
   );
 }
 
-export const languageOptions: Language[] = ['kk', 'ru', 'en'];
+export const languageOptions: Language[] = ['en', 'kk', 'ru'];

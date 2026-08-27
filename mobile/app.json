@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.alan.math",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Қосымша микрофонды дауыстық командалар үшін пайдаланады."
+        "NSMicrophoneUsageDescription": "Қосымша микрофонды дауыстық командалар үшін пайдаланады. / Приложению нужен микрофон для голосовых команд. / The app uses the microphone for voice commands.",
+        "NSSpeechRecognitionUsageDescription": "Қосымша сөйлеуді тануды дауыстық командалар үшін пайдаланады. / Приложению нужно распознавание речи. / The app uses speech recognition for voice commands."
       }
     },
     "android": {

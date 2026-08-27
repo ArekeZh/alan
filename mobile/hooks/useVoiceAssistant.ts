@@ -13,7 +13,13 @@ import {
   requestMicPermission,
   setSpeakerMode,
   stopAllAudio,
+  type RecordingAudio,
 } from '../services/audioSession';
+import {
+  hasEnglishSttCredentials,
+  transcribeEnglish,
+  usesEnglishVoice,
+} from '../services/englishSpeech';
 import {
   hasYandexCredentials,
   recognizeSpeech,
@@ -37,6 +43,18 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function transcribeUtterance(
+  recording: RecordingAudio,
+  fileUri: string,
+  language: Language,
+) {
+  if (usesEnglishVoice(language)) {
+    return transcribeEnglish(recording, fileUri);
+  }
+
+  return recognizeSpeech(recording, language);
+}
+
 export function useVoiceAssistant({
   greeting,
   onOpenFirstModule,
@@ -47,7 +65,9 @@ export function useVoiceAssistant({
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [transcript, setTranscript] = useState('');
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
-  const credentialsReady = hasYandexCredentials();
+  const yandexReady = hasYandexCredentials();
+  const englishSttReady = hasEnglishSttCredentials();
+  const englishVoice = usesEnglishVoice(language);
 
   const greetingRef = useRef(greeting);
   const languageRef = useRef(language);
@@ -74,6 +94,12 @@ export function useVoiceAssistant({
 
   const speak = useCallback(
     async (text: string, languageToUse: Language, allowNativeFallback = true) => {
+      if (usesEnglishVoice(languageToUse)) {
+        await setSpeakerMode();
+        await speakTextAsync(text, languageToUse);
+        return;
+      }
+
       try {
         const audio = await synthesizeSpeech(text, languageToUse);
         await playMp3Bytes(audio);
@@ -166,17 +192,24 @@ export function useVoiceAssistant({
         }
 
         const recording = await readPcmFromRecording(recordingUri);
-        void deleteRecording(recordingUri);
 
         if (!wakeEnabledRef.current || !isCurrent(session)) {
+          void deleteRecording(recordingUri);
           return;
         }
 
         if (!hasVoiceActivity(recording.bytes)) {
+          void deleteRecording(recordingUri);
           continue;
         }
 
-        const spoken = await recognizeSpeech(recording, languageRef.current);
+        const spoken = await transcribeUtterance(
+          recording,
+          recordingUri,
+          languageRef.current,
+        );
+        void deleteRecording(recordingUri);
+
         if (!wakeEnabledRef.current || !isCurrent(session)) {
           return;
         }
@@ -241,8 +274,12 @@ export function useVoiceAssistant({
       setStatus('thinking');
       await setSpeakerMode();
       const recording = await readPcmFromRecording(recordingUri);
+      const spoken = await transcribeUtterance(
+        recording,
+        recordingUri,
+        languageRef.current,
+      );
       void deleteRecording(recordingUri);
-      const spoken = await recognizeSpeech(recording, languageRef.current);
 
       if (!isCurrent(session)) {
         return;
@@ -302,6 +339,16 @@ export function useVoiceAssistant({
       if (!isCurrent(session)) {
         return;
       }
+
+      const canListen = usesEnglishVoice(languageRef.current)
+        ? hasEnglishSttCredentials()
+        : hasYandexCredentials();
+
+      if (!canListen) {
+        setStatus('idle');
+        return;
+      }
+
       await delay(400);
       await startListening();
     } catch {
@@ -324,7 +371,8 @@ export function useVoiceAssistant({
   }, []);
 
   useEffect(() => {
-    const canRun = enabled && credentialsReady && appActive;
+    const engineReady = englishVoice || yandexReady;
+    const canRun = enabled && engineReady && appActive;
 
     if (!canRun) {
       wakeEnabledRef.current = false;
@@ -351,7 +399,7 @@ export function useVoiceAssistant({
       sessionRef.current += 1;
       stopAllAudio();
     };
-  }, [appActive, credentialsReady, enabled, language]);
+  }, [appActive, enabled, englishVoice, language, yandexReady]);
 
   useEffect(() => {
     return () => {
@@ -369,7 +417,7 @@ export function useVoiceAssistant({
   return {
     status,
     transcript,
-    recognitionAvailable: credentialsReady,
+    recognitionAvailable: englishVoice ? englishSttReady : yandexReady,
     repeatGreeting,
     startListening,
   };

@@ -4,7 +4,6 @@ import {
   ReactNode,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -24,18 +23,8 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('kk');
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (stored === 'kk' || stored === 'ru' || stored === 'en') {
-          setLanguageState(stored);
-        }
-      })
-      .finally(() => setIsReady(true));
-  }, []);
+  // Always open in English so Yandex SpeechKit is not used until Kazakh or Russian is selected.
+  const [language, setLanguageState] = useState<Language>('en');
 
   const setLanguage = useCallback((nextLanguage: Language) => {
     setLanguageState(nextLanguage);
@@ -49,8 +38,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ language, setLanguage, t, isReady }),
-    [language, setLanguage, t, isReady],
+    () => ({ language, setLanguage, t, isReady: true }),
+    [language, setLanguage, t],
   );
 
   return (

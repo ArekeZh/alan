@@ -45,6 +45,9 @@ export function VoiceStatusCard({
     >
       <Text style={styles.label}>{t('voice.assistant')}</Text>
       <Text style={styles.status}>{statusLabel}</Text>
+      {!recognitionAvailable ? (
+        <Text style={styles.transcript}>{t('voice.unavailable')}</Text>
+      ) : null}
       {transcript ? (
         <Text style={styles.transcript}>
           {t('voice.heard')}: {transcript}
