@@ -1,5 +1,5 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,17 +14,8 @@ import { useVoiceAssistant } from '../hooks/useVoiceAssistant';
 import { useLanguage } from '../i18n/LanguageContext';
 
 export default function HomeScreen() {
-  const router = useRouter();
   const { t } = useLanguage();
   const { isReady, lastOpenedModuleId } = useLessonProgress();
-  const [screenFocused, setScreenFocused] = useState(true);
-
-  useFocusEffect(
-    useCallback(() => {
-      setScreenFocused(true);
-      return () => setScreenFocused(false);
-    }, []),
-  );
 
   const firstModule = modules[0];
   const lastModule = lastOpenedModuleId ? getModule(lastOpenedModuleId) : undefined;
@@ -43,10 +34,19 @@ export default function HomeScreen() {
     router.push(`/module/${firstModule.id}`);
   };
 
+  const goBack = () => {
+    if (!router.canGoBack()) {
+      return false;
+    }
+    router.back();
+    return true;
+  };
+
   const voice = useVoiceAssistant({
     greeting,
     onOpenFirstModule: openFirstModule,
-    enabled: isReady && screenFocused,
+    onGoBack: goBack,
+    enabled: isReady,
   });
 
   return (

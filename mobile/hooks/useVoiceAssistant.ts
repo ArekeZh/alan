@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, AppState } from 'react-native';
 
 import { useLanguage } from '../i18n/LanguageContext';
 import {
@@ -21,7 +21,7 @@ import {
 } from '../services/yandexSpeech';
 import { Language } from '../types';
 import { speakTextAsync, stopSpeaking } from '../utils/speech';
-import { wantsOpenFirstModule } from '../utils/voiceCommands';
+import { wantsGoBack, wantsOpenFirstModule } from '../utils/voiceCommands';
 import { containsWakeWord } from '../utils/wakeWord';
 
 export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'thinking' | 'error';
@@ -29,6 +29,7 @@ export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'think
 type UseVoiceAssistantOptions = {
   greeting: string;
   onOpenFirstModule: () => void;
+  onGoBack: () => boolean;
   enabled: boolean;
 };
 
@@ -39,6 +40,7 @@ function delay(ms: number) {
 export function useVoiceAssistant({
   greeting,
   onOpenFirstModule,
+  onGoBack,
   enabled,
 }: UseVoiceAssistantOptions) {
   const { language, t } = useLanguage();
@@ -50,6 +52,7 @@ export function useVoiceAssistant({
   const greetingRef = useRef(greeting);
   const languageRef = useRef(language);
   const openModuleRef = useRef(onOpenFirstModule);
+  const goBackRef = useRef(onGoBack);
   const tRef = useRef(t);
   const sessionRef = useRef(0);
   const wakeEnabledRef = useRef(false);
@@ -57,10 +60,14 @@ export function useVoiceAssistant({
   const previousLanguageRef = useRef<Language | null>(null);
   const startListeningRef = useRef<() => Promise<void>>(async () => {});
   const runWakeLoopRef = useRef<(session: number) => Promise<void>>(async () => {});
+  const actOnCommandRef = useRef<(spoken: string, session: number) => Promise<boolean>>(
+    async () => false,
+  );
 
   greetingRef.current = greeting;
   languageRef.current = language;
   openModuleRef.current = onOpenFirstModule;
+  goBackRef.current = onGoBack;
   tRef.current = t;
 
   const isCurrent = useCallback((session: number) => session === sessionRef.current, []);
@@ -92,6 +99,43 @@ export function useVoiceAssistant({
     },
     [isCurrent],
   );
+
+  actOnCommandRef.current = async (spoken: string, session: number) => {
+    if (wantsOpenFirstModule(spoken)) {
+      setTranscript(spoken);
+      wakeEnabledRef.current = false;
+      setStatus('speaking');
+      await speak(tRef.current('voice.openingModule'), languageRef.current, false);
+      if (isCurrent(session)) {
+        openModuleRef.current();
+        resumeWakeListening(session);
+      }
+      return true;
+    }
+
+    if (!wantsGoBack(spoken)) {
+      return false;
+    }
+
+    setTranscript(spoken);
+    wakeEnabledRef.current = false;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    const didGoBack = goBackRef.current();
+    if (!isCurrent(session)) {
+      return true;
+    }
+
+    if (didGoBack) {
+      resumeWakeListening(session);
+      return true;
+    }
+
+    setStatus('speaking');
+    await speak(tRef.current('voice.onHomePage'), languageRef.current, false);
+    resumeWakeListening(session);
+    return true;
+  };
 
   runWakeLoopRef.current = async (session: number) => {
     const micGranted = await requestMicPermission();
@@ -137,6 +181,10 @@ export function useVoiceAssistant({
           return;
         }
 
+        if (await actOnCommandRef.current(spoken, session)) {
+          return;
+        }
+
         if (!containsWakeWord(spoken)) {
           continue;
         }
@@ -144,16 +192,6 @@ export function useVoiceAssistant({
         setTranscript(spoken);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         wakeEnabledRef.current = false;
-
-        if (wantsOpenFirstModule(spoken)) {
-          setStatus('speaking');
-          await speak(tRef.current('voice.openingModule'), languageRef.current, false);
-          if (isCurrent(session)) {
-            openModuleRef.current();
-          }
-          return;
-        }
-
         await startListeningRef.current();
         return;
       } catch (error) {
@@ -210,14 +248,7 @@ export function useVoiceAssistant({
         return;
       }
 
-      setTranscript(spoken);
-
-      if (wantsOpenFirstModule(spoken)) {
-        setStatus('speaking');
-        await speak(tRef.current('voice.openingModule'), languageRef.current, false);
-        if (isCurrent(session)) {
-          openModuleRef.current();
-        }
+      if (await actOnCommandRef.current(spoken, session)) {
         return;
       }
 
@@ -226,6 +257,7 @@ export function useVoiceAssistant({
         return;
       }
 
+      setTranscript(spoken);
       setStatus('speaking');
       await speak(tRef.current('voice.didNotUnderstand'), languageRef.current, false);
       resumeWakeListening(session);
