@@ -272,7 +272,11 @@ function isWavRecording(recording: RecordingAudio) {
   return recording.wavBase64.startsWith('UklGR');
 }
 
-async function startRecognitionV3(recording: RecordingAudio, language: Language) {
+async function startRecognitionV3(
+  recording: RecordingAudio,
+  language: Language,
+  allLanguages = false,
+) {
   const useWav = isWavRecording(recording);
   const response = await fetch(STT_V3_RECOGNIZE_URL, {
     method: 'POST',
@@ -299,7 +303,7 @@ async function startRecognitionV3(recording: RecordingAudio, language: Language)
             },
         languageRestriction: {
           restrictionType: 'WHITELIST',
-          languageCode: [STT_LANG[language]],
+          languageCode: allLanguages ? ['kk-KZ', 'ru-RU', 'en-US'] : [STT_LANG[language]],
         },
         audioProcessingType: 'FULL_DATA',
       },
@@ -340,12 +344,16 @@ async function readRecognitionV3(operationId: string) {
   return collectTranscript(payloadText);
 }
 
-async function recognizeSpeechV3(recording: RecordingAudio, language: Language) {
+async function recognizeSpeechV3(
+  recording: RecordingAudio,
+  language: Language,
+  allLanguages = false,
+) {
   if (recording.wavBase64.length < 100) {
     return '';
   }
 
-  const operationId = await startRecognitionV3(recording, language);
+  const operationId = await startRecognitionV3(recording, language, allLanguages);
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await delay(400);
@@ -358,6 +366,10 @@ async function recognizeSpeechV3(recording: RecordingAudio, language: Language) 
   throw new Error('STT v3 timed out');
 }
 
-export async function recognizeSpeech(recording: RecordingAudio, language: Language) {
-  return recognizeSpeechV3(recording, language);
+export async function recognizeSpeech(
+  recording: RecordingAudio,
+  language: Language,
+  allLanguages = false,
+) {
+  return recognizeSpeechV3(recording, language, allLanguages);
 }

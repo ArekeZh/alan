@@ -1,3 +1,4 @@
+import { usePathname } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
@@ -26,8 +27,9 @@ import {
   synthesizeSpeech,
 } from '../services/yandexSpeech';
 import { Language } from '../types';
+import { getPageTitleAfterGoingBack } from '../utils/pageTitle';
 import { speakTextAsync, stopSpeaking } from '../utils/speech';
-import { wantsGoBack, wantsOpenFirstModule } from '../utils/voiceCommands';
+import { wantsChangeLanguage, wantsGoBack, wantsOpenFirstModule, parseSpokenLanguage } from '../utils/voiceCommands';
 import { containsWakeWord } from '../utils/wakeWord';
 
 export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'thinking' | 'error';
@@ -55,13 +57,26 @@ async function transcribeUtterance(
   return recognizeSpeech(recording, language);
 }
 
+async function transcribeLanguageChoice(
+  recording: RecordingAudio,
+  fileUri: string,
+  language: Language,
+) {
+  if (hasEnglishSttCredentials()) {
+    return transcribeEnglish(recording, fileUri, { detectLanguage: true });
+  }
+
+  return recognizeSpeech(recording, language, true);
+}
+
 export function useVoiceAssistant({
   greeting,
   onOpenFirstModule,
   onGoBack,
   enabled,
 }: UseVoiceAssistantOptions) {
-  const { language, t } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
+  const pathname = usePathname();
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [transcript, setTranscript] = useState('');
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
@@ -74,6 +89,8 @@ export function useVoiceAssistant({
   const openModuleRef = useRef(onOpenFirstModule);
   const goBackRef = useRef(onGoBack);
   const tRef = useRef(t);
+  const pathnameRef = useRef(pathname);
+  const setLanguageRef = useRef(setLanguage);
   const sessionRef = useRef(0);
   const wakeEnabledRef = useRef(false);
   const hasGreetedRef = useRef(false);
@@ -89,29 +106,24 @@ export function useVoiceAssistant({
   openModuleRef.current = onOpenFirstModule;
   goBackRef.current = onGoBack;
   tRef.current = t;
+  pathnameRef.current = pathname;
+  setLanguageRef.current = setLanguage;
 
   const isCurrent = useCallback((session: number) => session === sessionRef.current, []);
 
-  const speak = useCallback(
-    async (text: string, languageToUse: Language, allowNativeFallback = true) => {
-      if (usesEnglishVoice(languageToUse)) {
-        await setSpeakerMode();
-        await speakTextAsync(text, languageToUse);
-        return;
-      }
+  const speak = useCallback(async (text: string, languageToUse: Language) => {
+    await stopSpeaking();
 
-      try {
-        const audio = await synthesizeSpeech(text, languageToUse);
-        await playMp3Bytes(audio);
-      } catch {
-        if (!allowNativeFallback) {
-          throw new Error('Yandex TTS unavailable after microphone');
-        }
-        await speakTextAsync(text, languageToUse);
-      }
-    },
-    [],
-  );
+    if (usesEnglishVoice(languageToUse)) {
+      await setSpeakerMode();
+      await delay(250);
+      await speakTextAsync(text, languageToUse);
+      return;
+    }
+
+    const audio = await synthesizeSpeech(text, languageToUse);
+    await playMp3Bytes(audio);
+  }, []);
 
   const resumeWakeListening = useCallback(
     (session: number) => {
@@ -126,12 +138,91 @@ export function useVoiceAssistant({
     [isCurrent],
   );
 
+  const listenFollowUpRef = useRef<
+    (session: number, forLanguagePick: boolean) => Promise<string | null>
+  >(async () => null);
+
+  listenFollowUpRef.current = async (session, forLanguagePick) => {
+    setStatus('listening');
+    const recordingUri = await recordCommand();
+    if (!isCurrent(session)) {
+      return null;
+    }
+    if (!recordingUri) {
+      return '';
+    }
+
+    setStatus('thinking');
+    await setSpeakerMode();
+    const recording = await readPcmFromRecording(recordingUri);
+    const spoken = forLanguagePick
+      ? await transcribeLanguageChoice(recording, recordingUri, languageRef.current)
+      : await transcribeUtterance(recording, recordingUri, languageRef.current);
+    void deleteRecording(recordingUri);
+
+    if (!isCurrent(session)) {
+      return null;
+    }
+
+    return spoken;
+  };
+
   actOnCommandRef.current = async (spoken: string, session: number) => {
+    if (wantsChangeLanguage(spoken)) {
+      setTranscript(spoken);
+      wakeEnabledRef.current = false;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      const applyLanguageChoice = async (nextLanguage: Language) => {
+        const isSameLanguage = nextLanguage === languageRef.current;
+        if (isSameLanguage) {
+          setStatus('speaking');
+          await speak(tRef.current('voice.alreadyThisLanguage'), languageRef.current);
+          resumeWakeListening(session);
+          return true;
+        }
+
+        setLanguageRef.current(nextLanguage);
+        return true;
+      };
+
+      const namedInCommand = parseSpokenLanguage(spoken);
+      if (namedInCommand) {
+        return applyLanguageChoice(namedInCommand);
+      }
+
+      setStatus('speaking');
+      await speak(tRef.current('voice.askWhichLanguage'), languageRef.current);
+      if (!isCurrent(session)) {
+        return true;
+      }
+
+      await delay(400);
+      const answer = await listenFollowUpRef.current(session, true);
+      if (answer === null || !isCurrent(session)) {
+        return true;
+      }
+
+      setTranscript(answer);
+      const chosenLanguage = parseSpokenLanguage(answer);
+      if (!chosenLanguage) {
+        setStatus('speaking');
+        await speak(
+          tRef.current('voice.didNotUnderstandLanguage'),
+          languageRef.current,
+        );
+        resumeWakeListening(session);
+        return true;
+      }
+
+      return applyLanguageChoice(chosenLanguage);
+    }
+
     if (wantsOpenFirstModule(spoken)) {
       setTranscript(spoken);
       wakeEnabledRef.current = false;
       setStatus('speaking');
-      await speak(tRef.current('voice.openingModule'), languageRef.current, false);
+      await speak(tRef.current('voice.openingModule'), languageRef.current);
       if (isCurrent(session)) {
         openModuleRef.current();
         resumeWakeListening(session);
@@ -147,18 +238,15 @@ export function useVoiceAssistant({
     wakeEnabledRef.current = false;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    const pageTitle = getPageTitleAfterGoingBack(pathnameRef.current, tRef.current);
     const didGoBack = goBackRef.current();
     if (!isCurrent(session)) {
       return true;
     }
 
-    if (didGoBack) {
-      resumeWakeListening(session);
-      return true;
-    }
-
+    const announcedPage = didGoBack ? pageTitle : tRef.current('voice.homePageName');
     setStatus('speaking');
-    await speak(tRef.current('voice.onHomePage'), languageRef.current, false);
+    await speak(tRef.current('voice.nowOnPage', { page: announcedPage }), languageRef.current);
     resumeWakeListening(session);
     return true;
   };
@@ -296,7 +384,7 @@ export function useVoiceAssistant({
 
       setTranscript(spoken);
       setStatus('speaking');
-      await speak(tRef.current('voice.didNotUnderstand'), languageRef.current, false);
+      await speak(tRef.current('voice.didNotUnderstand'), languageRef.current);
       resumeWakeListening(session);
     } catch (error) {
       if (!isCurrent(session)) {
@@ -309,7 +397,7 @@ export function useVoiceAssistant({
 
       setStatus('error');
       try {
-        await speak(tRef.current('voice.error'), languageRef.current, false);
+        await speak(tRef.current('voice.error'), languageRef.current);
       } catch {
         // Native iOS TTS after the mic session plays through the earpiece.
       }

@@ -34,10 +34,6 @@ export async function pickVoice(language: Language) {
     if (prefixMatch) {
       return prefixMatch;
     }
-
-    if (language === 'kk') {
-      return voices.find((voice) => localePrefix(voice.language) === 'ru') ?? null;
-    }
   } catch {
     return null;
   }

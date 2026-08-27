@@ -11,6 +11,8 @@ import {
 import AudioNativeModule from 'expo-audio/build/AudioModule';
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { stopSpeaking } from '../utils/speech';
+
 const LISTEN_MS = 5500;
 const WAKE_MS = 2500;
 const TARGET_SAMPLE_RATE = 16000;
@@ -129,6 +131,7 @@ function audioExtension(bytes: ArrayBuffer) {
 }
 
 export async function playMp3Bytes(bytes: ArrayBuffer) {
+  await stopSpeaking();
   await stopPlayback();
   await setSpeakerMode();
 
@@ -160,6 +163,7 @@ export async function playMp3Bytes(bytes: ArrayBuffer) {
 }
 
 async function recordForDuration(durationMs: number): Promise<string | null> {
+  await stopSpeaking();
   await stopPlayback();
   await stopRecording();
   await setRecordingMode();
