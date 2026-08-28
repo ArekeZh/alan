@@ -354,11 +354,22 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
   },
 ];
 
-function hasSectionWord(text: string) {
+const LESSON_WORDS = [
+  'сабақ',
+  'сабак',
+  'sabaq',
+  'sabaқ',
+  'урок',
+  'урока',
+  'уроку',
+  'lesson',
+];
+
+function hasCategoryWord(text: string, categoryWords: string[]) {
   const tokens = text.split(' ');
   const compact = tokens.join('');
 
-  return SECTION_WORDS.some((word) => {
+  return categoryWords.some((word) => {
     const normalized = normalizeSpeech(word);
     return tokens.includes(normalized) || compact.includes(normalized);
   });
@@ -392,24 +403,30 @@ function parseSpokenNumber(text: string) {
   return bestMatch?.number ?? null;
 }
 
-export type SectionCommandResult =
+export type SpokenItemOption = {
+  id: string;
+  names: string[];
+};
+
+export type ItemCommandResult =
   | { kind: 'match'; id: string }
   | { kind: 'unknown' }
   | { kind: 'none' };
 
-export function interpretSectionCommand(
+function interpretNamedNumberedCommand(
   transcript: string,
-  sections: SpokenSectionOption[],
-): SectionCommandResult {
+  items: SpokenItemOption[],
+  categoryWords: string[],
+): ItemCommandResult {
   const text = normalizeSpeech(transcript);
-  if (!text || sections.length === 0) {
+  if (!text || items.length === 0) {
     return { kind: 'none' };
   }
 
   let bestName: { id: string; length: number } | null = null;
 
-  for (const section of sections) {
-    for (const name of section.names) {
+  for (const item of items) {
+    for (const name of item.names) {
       const normalizedName = normalizeSpeech(name);
       if (normalizedName.length < 3) {
         continue;
@@ -422,7 +439,7 @@ export function interpretSectionCommand(
 
       const isLonger = !bestName || normalizedName.length > bestName.length;
       if (isLonger) {
-        bestName = { id: section.id, length: normalizedName.length };
+        bestName = { id: item.id, length: normalizedName.length };
       }
     }
   }
@@ -433,17 +450,37 @@ export function interpretSectionCommand(
 
   const spokenNumber = parseSpokenNumber(text);
   if (spokenNumber !== null) {
-    const section = sections[spokenNumber - 1];
-    if (section) {
-      return { kind: 'match', id: section.id };
+    const item = items[spokenNumber - 1];
+    if (item) {
+      return { kind: 'match', id: item.id };
     }
 
     return { kind: 'unknown' };
   }
 
-  if (hasSectionWord(text)) {
+  if (hasCategoryWord(text, categoryWords)) {
     return { kind: 'unknown' };
   }
 
   return { kind: 'none' };
+}
+
+export type SectionCommandResult = ItemCommandResult;
+
+export function interpretSectionCommand(
+  transcript: string,
+  sections: SpokenSectionOption[],
+): SectionCommandResult {
+  return interpretNamedNumberedCommand(transcript, sections, SECTION_WORDS);
+}
+
+export type SpokenLessonOption = SpokenItemOption;
+
+export type LessonCommandResult = ItemCommandResult;
+
+export function interpretLessonCommand(
+  transcript: string,
+  lessons: SpokenLessonOption[],
+): LessonCommandResult {
+  return interpretNamedNumberedCommand(transcript, lessons, LESSON_WORDS);
 }

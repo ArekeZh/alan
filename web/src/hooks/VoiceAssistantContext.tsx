@@ -59,6 +59,13 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     [navigate],
   );
 
+  const onOpenLesson = useCallback(
+    (lessonId: string) => {
+      navigate(`/lesson/${lessonId}`);
+    },
+    [navigate],
+  );
+
   const onGoBack = useCallback(() => {
     if (location.pathname === '/') {
       return false;
@@ -77,6 +84,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     greeting,
     onOpenFirstModule,
     onOpenSection,
+    onOpenLesson,
     onGoBack,
     enabled: isReady && audioUnlocked,
   });

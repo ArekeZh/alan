@@ -16,6 +16,14 @@ export function getModuleIdFromPath(pathname: string) {
   return pathId(pathname, 'module');
 }
 
+export function getSectionIdFromPath(pathname: string) {
+  if (pathId(pathname, 'lesson')) {
+    return undefined;
+  }
+
+  return pathId(pathname, 'section');
+}
+
 export function getPageTitleAfterGoingBack(pathname: string, t: Translate) {
   const lessonId = pathId(pathname, 'lesson');
   if (lessonId) {

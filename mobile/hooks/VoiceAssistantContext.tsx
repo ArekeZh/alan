@@ -49,6 +49,10 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     router.push(`/section/${sectionId}`);
   }, []);
 
+  const onOpenLesson = useCallback((lessonId: string) => {
+    router.push(`/lesson/${lessonId}`);
+  }, []);
+
   const onGoBack = useCallback(() => {
     if (pathname === '/' || !router.canGoBack()) {
       return false;
@@ -61,6 +65,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     greeting,
     onOpenFirstModule,
     onOpenSection,
+    onOpenLesson,
     onGoBack,
     enabled: isReady,
   });

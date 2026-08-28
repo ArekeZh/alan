@@ -43,8 +43,15 @@ const translations: Record<Language, TranslationValue> = {
       sectionListItem: '{{ordinal}} бөлім) {{name}}',
       openingSection: '{{section}} бөлімін ашамын.',
       unknownSection: 'Мұндай бөлім жоқ. Тізімді есту үшін «ақпарат» деп айтыңыз.',
+      enteredSection:
+        'Сіз {{section}} бөліміндесіз. Қандай сабақтар бар екенін есту үшін «ақпарат» деп айтыңыз.',
+      lessonListItem: '{{ordinal}} сабақ) {{name}}',
+      openingLesson: '{{lesson}} сабағын ашамын.',
+      unknownLesson: 'Мұндай сабақ жоқ. Тізімді есту үшін «ақпарат» деп айтыңыз.',
       didNotUnderstandOnModule:
         'Түсінбедім. Пробіл басып айтыңыз. Ақпарат — бөлімдер тізімі. Немесе бөлімнің атын немесе нөмірін айтыңыз.',
+      didNotUnderstandOnSection:
+        'Түсінбедім. Пробіл басып айтыңыз. Ақпарат — сабақтар тізімі. Немесе сабақтың атын немесе нөмірін айтыңыз.',
       ordinal: {
         '1': 'бірінші',
         '2': 'екінші',
@@ -175,8 +182,15 @@ const translations: Record<Language, TranslationValue> = {
       sectionListItem: '{{ordinal}} раздел) {{name}}',
       openingSection: 'Открываю раздел {{section}}.',
       unknownSection: 'Такого раздела нет. Чтобы услышать список, скажите «информация».',
+      enteredSection:
+        'Вы в разделе {{section}}. Чтобы услышать список уроков, скажите «информация».',
+      lessonListItem: '{{ordinal}} урок) {{name}}',
+      openingLesson: 'Открываю урок {{lesson}}.',
+      unknownLesson: 'Такого урока нет. Чтобы услышать список, скажите «информация».',
       didNotUnderstandOnModule:
         'Не понял. Нажмите пробел и скажите. «Информация» — список разделов. Или назовите раздел или его номер.',
+      didNotUnderstandOnSection:
+        'Не понял. Нажмите пробел и скажите. «Информация» — список уроков. Или назовите урок или его номер.',
       ordinal: {
         '1': 'первый',
         '2': 'второй',
@@ -307,8 +321,15 @@ const translations: Record<Language, TranslationValue> = {
       sectionListItem: '{{ordinal}} section) {{name}}',
       openingSection: 'Opening the section {{section}}.',
       unknownSection: 'There is no such section. To hear the list, say information.',
+      enteredSection:
+        'You are in the section {{section}}. To hear the list of lessons, say information.',
+      lessonListItem: '{{ordinal}} lesson) {{name}}',
+      openingLesson: 'Opening the lesson {{lesson}}.',
+      unknownLesson: 'There is no such lesson. To hear the list, say information.',
       didNotUnderstandOnModule:
         'I did not understand. Press Space and speak. Say information for the list of sections. Or say the section name or number.',
+      didNotUnderstandOnSection:
+        'I did not understand. Press Space and speak. Say information for the list of lessons. Or say the lesson name or number.',
       ordinal: {
         '1': 'first',
         '2': 'second',
