@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,14 +9,21 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { colors, spacing, typography } from '../../constants/theme';
 import { getCorrectAnswer, getLesson } from '../../data/content';
+import { useVoiceAssistantState } from '../../hooks/VoiceAssistantContext';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useLessonProgress } from '../../hooks/useLessonProgress';
+import {
+  spokenAnswerOption,
+  spokenExerciseProgress,
+  spokenQuestion,
+} from '../../utils/exerciseSpeech';
 
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useLanguage();
   const { markLessonComplete } = useLessonProgress();
+  const { registerExerciseBridge, announceExercise, speakFeedback } = useVoiceAssistantState();
 
   const lesson = getLesson(id);
 
@@ -44,55 +51,173 @@ export default function LessonScreen() {
     return t(questionKeyByType[exercise.type], { a: exercise.a, b: exercise.b });
   }, [exercise, t]);
 
-  if (!lesson || !exercise) {
-    return null;
-  }
-
-  const lessonTitle = t(`${lesson.translationKey}.title`);
-  const totalExercises = lesson.exercises.length;
-  const progressLabel = t('exercise.exerciseProgress', {
-    current: Math.min(currentIndex + 1, totalExercises),
-    total: totalExercises,
-  });
-
-  const handleSelectAnswer = (value: number) => {
-    if (showResult) {
-      return;
+  const spokenProgressLabel = useMemo(() => {
+    if (!lesson) {
+      return '';
     }
 
-    setSelectedAnswer(value);
-    setShowResult(true);
+    return spokenExerciseProgress(
+      Math.min(currentIndex + 1, lesson.exercises.length),
+      lesson.exercises.length,
+      t,
+    );
+  }, [currentIndex, lesson, t]);
 
-    if (value === correctAnswer) {
-      setCorrectCount((count) => count + 1);
-    }
-  };
-
-  const handleContinue = async () => {
-    const isLastExercise = currentIndex === totalExercises - 1;
-
-    if (isLastExercise) {
-      await markLessonComplete(lesson.id, correctCount, totalExercises);
-      setIsFinished(true);
-      return;
+  const spokenQuestionText = useMemo(() => {
+    if (!exercise) {
+      return '';
     }
 
-    setCurrentIndex((index) => index + 1);
-    setSelectedAnswer(null);
-    setShowResult(false);
-  };
+    return spokenQuestion(exercise, t);
+  }, [exercise, t]);
 
-  const handleFinish = () => {
+  const chooseAnswerLabel = t('exercise.chooseAnswer');
+  const correctPraiseLabel = t('exercise.correctPraise');
+
+  const finishCorrectAnswer = useCallback(
+    async (newCorrectCount: number) => {
+      if (!lesson) {
+        return;
+      }
+
+      await speakFeedback(correctPraiseLabel);
+
+      const totalExercises = lesson.exercises.length;
+      const isLastExercise = currentIndex === totalExercises - 1;
+
+      if (isLastExercise) {
+        await markLessonComplete(lesson.id, newCorrectCount, totalExercises);
+        setIsFinished(true);
+        return;
+      }
+
+      setCurrentIndex((index) => index + 1);
+      setSelectedAnswer(null);
+      setShowResult(false);
+    },
+    [correctPraiseLabel, currentIndex, lesson, markLessonComplete, speakFeedback],
+  );
+
+  const submitAnswer = useCallback(
+    async (value: number) => {
+      if (showResult) {
+        return;
+      }
+
+      const isCorrect = value === correctAnswer;
+      setSelectedAnswer(value);
+      setShowResult(true);
+
+      if (!isCorrect) {
+        return;
+      }
+
+      const newCorrectCount = correctCount + 1;
+      setCorrectCount(newCorrectCount);
+      await finishCorrectAnswer(newCorrectCount);
+    },
+    [correctAnswer, correctCount, finishCorrectAnswer, showResult],
+  );
+
+  const handleFinish = useCallback(() => {
     router.back();
-  };
+  }, [router]);
 
-  const handleRetry = () => {
+  const handleRetry = useCallback(() => {
+    if (!lesson) {
+      return;
+    }
+
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setShowResult(false);
     setCorrectCount(0);
     setIsFinished(false);
-  };
+    void announceExercise(lesson.id, 0);
+  }, [announceExercise, lesson]);
+
+  useLayoutEffect(() => {
+    if (!lesson) {
+      registerExerciseBridge(null);
+      return;
+    }
+
+    if (isFinished) {
+      registerExerciseBridge({
+        lessonId: lesson.id,
+        exerciseIndex: 0,
+        options: [],
+        correctAnswer: 0,
+        showResult: false,
+        isFinished: true,
+        selectAnswer: async () => {},
+        repeatExercise: async () => {},
+        retryLesson: async () => {
+          handleRetry();
+        },
+        finishLesson: () => {
+          handleFinish();
+        },
+      });
+
+      return () => registerExerciseBridge(null);
+    }
+
+    if (!exercise) {
+      registerExerciseBridge(null);
+      return;
+    }
+
+    registerExerciseBridge({
+      lessonId: lesson.id,
+      exerciseIndex: currentIndex,
+      options: exercise.options,
+      correctAnswer,
+      showResult,
+      isFinished,
+      selectAnswer: submitAnswer,
+      repeatExercise: async () => {
+        await announceExercise(lesson.id, currentIndex);
+      },
+    });
+
+    return () => registerExerciseBridge(null);
+  }, [
+    announceExercise,
+    correctAnswer,
+    currentIndex,
+    exercise,
+    handleFinish,
+    handleRetry,
+    isFinished,
+    lesson,
+    registerExerciseBridge,
+    showResult,
+    submitAnswer,
+  ]);
+
+  useEffect(() => {
+    if (!lesson || !isFinished) {
+      return;
+    }
+
+    void speakFeedback(t('voice.lessonCompletePrompt'));
+  }, [isFinished, lesson, speakFeedback, t]);
+
+  useEffect(() => {
+    if (!lesson || isFinished || currentIndex === 0) {
+      return;
+    }
+
+    void announceExercise(lesson.id, currentIndex);
+  }, [announceExercise, currentIndex, isFinished, lesson]);
+
+  if (!lesson) {
+    return null;
+  }
+
+  const lessonTitle = t(`${lesson.translationKey}.title`);
+  const totalExercises = lesson.exercises.length;
 
   if (isFinished) {
     return (
@@ -125,9 +250,32 @@ export default function LessonScreen() {
     );
   }
 
+  if (!exercise) {
+    return null;
+  }
+
+  const progressLabel = t('exercise.exerciseProgress', {
+    current: Math.min(currentIndex + 1, totalExercises),
+    total: totalExercises,
+  });
+
+  const handleContinue = async () => {
+    const isLastExercise = currentIndex === totalExercises - 1;
+
+    if (isLastExercise) {
+      await markLessonComplete(lesson.id, correctCount, totalExercises);
+      setIsFinished(true);
+      return;
+    }
+
+    setCurrentIndex((index) => index + 1);
+    setSelectedAnswer(null);
+    setShowResult(false);
+  };
+
   const feedbackText =
     showResult && selectedAnswer === correctAnswer
-      ? t('common.correct')
+      ? correctPraiseLabel
       : showResult
         ? `${t('common.wrong')} ${correctAnswer}`
         : null;
@@ -141,13 +289,16 @@ export default function LessonScreen() {
           current={currentIndex + (showResult ? 1 : 0)}
           total={totalExercises}
           label={progressLabel}
+          spokenLabel={spokenProgressLabel}
         />
 
         <View style={styles.questionCard}>
-          <Text style={styles.questionLabel}>{t('exercise.chooseAnswer')}</Text>
+          <Text accessibilityRole="text" accessibilityLabel={chooseAnswerLabel} style={styles.questionLabel}>
+            {chooseAnswerLabel}
+          </Text>
           <Text
             accessibilityRole="text"
-            accessibilityLabel={questionText}
+            accessibilityLabel={spokenQuestionText}
             style={styles.question}
           >
             {questionText}
@@ -159,11 +310,12 @@ export default function LessonScreen() {
             <AnswerOption
               key={option}
               value={option}
+              spokenLabel={spokenAnswerOption(option, t)}
               selected={selectedAnswer === option}
               showResult={showResult}
               isCorrect={option === correctAnswer}
               disabled={showResult}
-              onPress={() => handleSelectAnswer(option)}
+              onPress={() => void submitAnswer(option)}
             />
           ))}
         </AnswerGrid>
@@ -180,7 +332,7 @@ export default function LessonScreen() {
           </Text>
         ) : null}
 
-        {showResult ? (
+        {showResult && selectedAnswer !== correctAnswer ? (
           <AccessibleButton
             label={
               currentIndex === totalExercises - 1

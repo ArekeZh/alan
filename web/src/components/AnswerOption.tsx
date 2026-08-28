@@ -4,6 +4,7 @@ import { playErrorSound, playSuccessSound } from '../services/feedbackSound';
 
 type AnswerOptionProps = {
   value: number;
+  spokenLabel?: string;
   selected: boolean;
   showResult: boolean;
   isCorrect: boolean;
@@ -13,6 +14,7 @@ type AnswerOptionProps = {
 
 export function AnswerOption({
   value,
+  spokenLabel,
   selected,
   showResult,
   isCorrect,
@@ -48,7 +50,7 @@ export function AnswerOption({
     <button
       type="button"
       className={`answer-option ${selectedClass} ${resultClass}`.trim()}
-      aria-label={String(value)}
+      aria-label={spokenLabel ?? String(value)}
       aria-pressed={selected}
       disabled={disabled}
       onClick={handlePress}

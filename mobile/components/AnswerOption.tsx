@@ -5,6 +5,7 @@ import { colors, spacing, touchTarget, typography } from '../constants/theme';
 
 type AnswerOptionProps = {
   value: number;
+  spokenLabel?: string;
   selected: boolean;
   showResult: boolean;
   isCorrect: boolean;
@@ -14,6 +15,7 @@ type AnswerOptionProps = {
 
 export function AnswerOption({
   value,
+  spokenLabel,
   selected,
   showResult,
   isCorrect,
@@ -46,7 +48,7 @@ export function AnswerOption({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={String(value)}
+      accessibilityLabel={spokenLabel ?? String(value)}
       accessibilityState={{ disabled, selected }}
       disabled={disabled}
       onPress={handlePress}

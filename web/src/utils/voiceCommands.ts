@@ -207,6 +207,99 @@ export function wantsInformation(transcript: string) {
   });
 }
 
+const REPEAT_WORDS = [
+  'повтори',
+  'повторить',
+  'повтор',
+  'қайтала',
+  'qaytala',
+  'qaitala',
+  'repeat',
+  'again',
+];
+
+export function wantsRepeat(transcript: string) {
+  const text = normalizeSpeech(transcript);
+  if (!text) {
+    return false;
+  }
+
+  const tokens = text.split(' ');
+  const compact = tokens.join('');
+
+  return REPEAT_WORDS.some((word) => {
+    const normalized = normalizeSpeech(word);
+    if (normalized.length <= 5) {
+      return tokens.includes(normalized);
+    }
+
+    return tokens.includes(normalized) || compact.includes(normalized);
+  });
+}
+
+const RETRY_LESSON_WORDS = [
+  'try again',
+  'попробовать снова',
+  'попробовать',
+  'қайта байқау',
+  'қайта байқап көр',
+  'qayta baqau',
+];
+
+export function wantsRetryLesson(transcript: string) {
+  const text = normalizeSpeech(transcript);
+  if (!text) {
+    return false;
+  }
+
+  const tokens = text.split(' ');
+  const compact = tokens.join('');
+
+  return RETRY_LESSON_WORDS.some((word) => {
+    const normalized = normalizeSpeech(word);
+    const normalizedCompact = normalized.replace(/\s/g, '');
+
+    if (normalized.length <= 4) {
+      return tokens.includes(normalized);
+    }
+
+    return (
+      tokens.includes(normalized) ||
+      compact.includes(normalizedCompact) ||
+      text.includes(normalized)
+    );
+  });
+}
+
+const RETURN_TO_LESSONS_WORDS = [
+  'finish',
+  'завершить',
+  'аяқтау',
+  'ayaktau',
+  'return',
+  'вернуться',
+  'вернутся',
+];
+
+export function wantsReturnToLessons(transcript: string) {
+  const text = normalizeSpeech(transcript);
+  if (!text) {
+    return false;
+  }
+
+  const tokens = text.split(' ');
+  const compact = tokens.join('');
+
+  return RETURN_TO_LESSONS_WORDS.some((word) => {
+    const normalized = normalizeSpeech(word);
+    if (normalized.length <= 5) {
+      return tokens.includes(normalized);
+    }
+
+    return tokens.includes(normalized) || compact.includes(normalized);
+  });
+}
+
 export type SpokenSectionOption = {
   id: string;
   names: string[];
@@ -236,6 +329,9 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'один',
       'одна',
       'одно',
+      'одного',
+      'одному',
+      'одним',
       'первый',
       'первая',
       'первое',
@@ -256,6 +352,9 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'ekinshi',
       'два',
       'две',
+      'двух',
+      'двум',
+      'двумя',
       'второй',
       'вторая',
       'второе',
@@ -274,6 +373,9 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'ушинши',
       'ushinshi',
       'три',
+      'трех',
+      'трем',
+      'тремя',
       'третий',
       'третья',
       'третье',
@@ -291,7 +393,8 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'төртінші',
       'тортинши',
       'четыре',
-      'четвёртый',
+      'четырех',
+      'четырем',
       'четвертый',
       'четвертая',
       'fourth',
@@ -306,6 +409,8 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'бесінші',
       'бесинши',
       'пять',
+      'пяти',
+      'пятью',
       'пятый',
       'пятая',
       'fifth',
@@ -314,11 +419,11 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
   },
   {
     number: 6,
-    words: ['6', 'алты', 'алтыншы', 'шесть', 'шестой', 'шестая', 'sixth', 'six'],
+    words: ['6', 'алты', 'алтыншы', 'шесть', 'шести', 'шестой', 'шестая', 'sixth', 'six'],
   },
   {
     number: 7,
-    words: ['7', 'жеті', 'жети', 'жетінші', 'семь', 'седьмой', 'седьмая', 'seventh', 'seven'],
+    words: ['7', 'жеті', 'жети', 'жетінші', 'семь', 'семи', 'седьмой', 'седьмая', 'seventh', 'seven'],
   },
   {
     number: 8,
@@ -328,6 +433,7 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'сегиз',
       'сегізінші',
       'восемь',
+      'восеми',
       'восьмой',
       'восьмая',
       'eighth',
@@ -342,6 +448,7 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
       'тогыз',
       'тоғызыншы',
       'девять',
+      'девяти',
       'девятый',
       'девятая',
       'ninth',
@@ -350,7 +457,47 @@ const NUMBER_WORDS: { number: number; words: string[] }[] = [
   },
   {
     number: 10,
-    words: ['10', 'он', 'оныншы', 'десять', 'десятый', 'десятая', 'tenth', 'ten'],
+    words: ['10', 'он', 'оныншы', 'десять', 'десяти', 'десятый', 'десятая', 'tenth', 'ten'],
+  },
+  {
+    number: 11,
+    words: ['11', 'он бір', 'он бир', 'одиннадцать', 'eleven'],
+  },
+  {
+    number: 12,
+    words: ['12', 'он екі', 'он еки', 'двенадцать', 'twelve'],
+  },
+  {
+    number: 13,
+    words: ['13', 'он үш', 'он уш', 'тринадцать', 'thirteen'],
+  },
+  {
+    number: 14,
+    words: ['14', 'он төрт', 'он торт', 'четырнадцать', 'fourteen'],
+  },
+  {
+    number: 15,
+    words: ['15', 'он бес', 'пятнадцать', 'fifteen'],
+  },
+  {
+    number: 16,
+    words: ['16', 'он алты', 'шестнадцать', 'sixteen'],
+  },
+  {
+    number: 17,
+    words: ['17', 'он жеті', 'он жети', 'семнадцать', 'seventeen'],
+  },
+  {
+    number: 18,
+    words: ['18', 'он сегіз', 'он сегиз', 'восемнадцать', 'eighteen'],
+  },
+  {
+    number: 19,
+    words: ['19', 'он тоғыз', 'он тогыз', 'девятнадцать', 'nineteen'],
+  },
+  {
+    number: 20,
+    words: ['20', 'жиырма', 'жирма', 'двадцать', 'twenty'],
   },
 ];
 
@@ -375,8 +522,13 @@ function hasCategoryWord(text: string, categoryWords: string[]) {
   });
 }
 
-function parseSpokenNumber(text: string) {
-  const tokens = text.split(' ');
+export function parseSpokenNumber(text: string) {
+  const normalized = normalizeSpeech(text);
+  if (!normalized) {
+    return null;
+  }
+
+  const tokens = normalized.split(' ');
   const compact = tokens.join('');
   let bestMatch: { number: number; length: number } | null = null;
 
@@ -401,6 +553,32 @@ function parseSpokenNumber(text: string) {
   }
 
   return bestMatch?.number ?? null;
+}
+
+export function interpretExerciseAnswer(transcript: string): number | null {
+  const normalized = normalizeSpeech(transcript);
+  if (!normalized) {
+    return null;
+  }
+
+  const fromFullPhrase = parseSpokenNumber(normalized);
+  if (fromFullPhrase !== null) {
+    return fromFullPhrase;
+  }
+
+  for (const token of normalized.split(' ')) {
+    const fromToken = parseSpokenNumber(token);
+    if (fromToken !== null) {
+      return fromToken;
+    }
+  }
+
+  const digitMatch = normalized.match(/\d+/);
+  if (digitMatch) {
+    return Number(digitMatch[0]);
+  }
+
+  return null;
 }
 
 export type SpokenItemOption = {

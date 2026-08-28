@@ -6,16 +6,18 @@ type ProgressBarProps = {
   current: number;
   total: number;
   label: string;
+  spokenLabel?: string;
 };
 
-export function ProgressBar({ current, total, label }: ProgressBarProps) {
+export function ProgressBar({ current, total, label, spokenLabel }: ProgressBarProps) {
   const progress = total === 0 ? 0 : current / total;
+  const accessibilityLabel = spokenLabel ?? label;
 
   return (
     <View
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: total, now: current }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       style={styles.container}
     >
       <Text style={styles.label}>{label}</Text>

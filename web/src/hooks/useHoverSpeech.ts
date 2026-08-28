@@ -6,7 +6,8 @@ import { speakHover, stopHoverSpeech } from '../utils/speech';
 import { useVoiceAssistantState } from './VoiceAssistantContext';
 
 const HOVER_DELAY_MS = 320;
-const SPEAKABLE = 'button, a[href], [role="button"], [role="radio"]';
+const SPEAKABLE =
+  'button, a[href], [role="button"], [role="radio"], [data-hover-speak]';
 
 function normalizeText(value: string | null | undefined) {
   return value?.replace(/\s+/g, ' ').trim() ?? '';

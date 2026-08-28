@@ -13,7 +13,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { requestMicPermission } from '../services/audioSession';
 import { unlockAudio } from '../services/feedbackSound';
 import { useLessonProgress } from './useLessonProgress';
-import { useVoiceAssistant, type VoiceStatus } from './useVoiceAssistant';
+import { useVoiceAssistant, type ExerciseVoiceBridge, type VoiceStatus } from './useVoiceAssistant';
 
 type VoiceAssistantContextValue = {
   status: VoiceStatus;
@@ -24,6 +24,9 @@ type VoiceAssistantContextValue = {
   toggleTalk: () => void;
   audioUnlocked: boolean;
   unlockAudioSession: () => Promise<void>;
+  registerExerciseBridge: (bridge: ExerciseVoiceBridge | null) => void;
+  announceExercise: (lessonId: string, exerciseIndex: number) => Promise<void>;
+  speakFeedback: (text: string) => Promise<void>;
 };
 
 const VoiceAssistantContext = createContext<VoiceAssistantContextValue | null>(null);
@@ -99,12 +102,18 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       toggleTalk: voice.toggleTalk,
       audioUnlocked,
       unlockAudioSession,
+      registerExerciseBridge: voice.registerExerciseBridge,
+      announceExercise: voice.announceExercise,
+      speakFeedback: voice.speakFeedback,
     }),
     [
       audioUnlocked,
       unlockAudioSession,
+      voice.announceExercise,
       voice.recognitionAvailable,
+      voice.registerExerciseBridge,
       voice.repeatGreeting,
+      voice.speakFeedback,
       voice.startListening,
       voice.status,
       voice.transcript,

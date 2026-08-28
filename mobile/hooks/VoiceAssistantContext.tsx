@@ -10,7 +10,7 @@ import {
 import { getModule, modules } from '../data/content';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useLessonProgress } from './useLessonProgress';
-import { useVoiceAssistant, type VoiceStatus } from './useVoiceAssistant';
+import { useVoiceAssistant, type ExerciseVoiceBridge, type VoiceStatus } from './useVoiceAssistant';
 
 type VoiceAssistantContextValue = {
   status: VoiceStatus;
@@ -19,6 +19,9 @@ type VoiceAssistantContextValue = {
   repeatGreeting: () => void;
   startListening: () => Promise<void>;
   toggleTalk: () => void;
+  registerExerciseBridge: (bridge: ExerciseVoiceBridge | null) => void;
+  announceExercise: (lessonId: string, exerciseIndex: number) => Promise<void>;
+  speakFeedback: (text: string) => Promise<void>;
 };
 
 const VoiceAssistantContext = createContext<VoiceAssistantContextValue | null>(null);
@@ -78,10 +81,16 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       repeatGreeting: voice.repeatGreeting,
       startListening: voice.startListening,
       toggleTalk: voice.toggleTalk,
+      registerExerciseBridge: voice.registerExerciseBridge,
+      announceExercise: voice.announceExercise,
+      speakFeedback: voice.speakFeedback,
     }),
     [
+      voice.announceExercise,
       voice.recognitionAvailable,
+      voice.registerExerciseBridge,
       voice.repeatGreeting,
+      voice.speakFeedback,
       voice.startListening,
       voice.status,
       voice.transcript,
