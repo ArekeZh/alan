@@ -62,9 +62,9 @@ export function VoiceStatusCard({
           style={styles.action}
         />
         <AccessibleButton
-          label={t('voice.listen')}
+          label={status === 'listening' ? t('voice.stopListening') : t('voice.listen')}
           onPress={onListen}
-          disabled={!recognitionAvailable || status === 'speaking' || status === 'listening' || status === 'thinking'}
+          disabled={!recognitionAvailable || status === 'thinking'}
           style={styles.action}
         />
       </View>

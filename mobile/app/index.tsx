@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,54 +7,16 @@ import { LanguagePicker } from '../components/LanguagePicker';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { VoiceStatusCard } from '../components/VoiceStatusCard';
 import { colors, spacing, typography } from '../constants/theme';
-import { getModule, modules } from '../data/content';
-import { useLessonProgress } from '../hooks/useLessonProgress';
-import { useVoiceAssistant } from '../hooks/useVoiceAssistant';
+import { modules } from '../data/content';
+import { useVoiceAssistantState } from '../hooks/VoiceAssistantContext';
 import { useLanguage } from '../i18n/LanguageContext';
 
 export default function HomeScreen() {
   const { t } = useLanguage();
-  const { isReady, lastOpenedModuleId } = useLessonProgress();
-
-  const firstModule = modules[0];
-  const lastModule = lastOpenedModuleId ? getModule(lastOpenedModuleId) : undefined;
-  const progressModule = lastModule ?? firstModule;
-  const progressModuleTitle = t(`${progressModule.translationKey}.title`);
-
-  const greeting = useMemo(() => {
-    const progressLine = lastModule
-      ? t('voice.progressAtModule', { module: progressModuleTitle })
-      : t('voice.progressNotStarted', { module: progressModuleTitle });
-
-    return `${t('voice.greeting')} ${progressLine} ${t('voice.askCommand')}`;
-  }, [lastModule, progressModuleTitle, t]);
-
-  const openFirstModule = () => {
-    router.push(`/module/${firstModule.id}`);
-  };
-
-  const openSection = (sectionId: string) => {
-    router.push(`/section/${sectionId}`);
-  };
-
-  const goBack = () => {
-    if (!router.canGoBack()) {
-      return false;
-    }
-    router.back();
-    return true;
-  };
-
-  const voice = useVoiceAssistant({
-    greeting,
-    onOpenFirstModule: openFirstModule,
-    onOpenSection: openSection,
-    onGoBack: goBack,
-    enabled: isReady,
-  });
+  const voice = useVoiceAssistantState();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
         <ScreenHeader title={t('app.name')} subtitle={t('app.tagline')} />
 
@@ -64,7 +25,7 @@ export default function HomeScreen() {
           transcript={voice.transcript}
           recognitionAvailable={voice.recognitionAvailable}
           onRepeat={voice.repeatGreeting}
-          onListen={voice.startListening}
+          onListen={voice.toggleTalk}
         />
 
         <LanguagePicker />

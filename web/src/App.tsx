@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { ListeningMicBadge } from './components/ListeningMicBadge';
 import { StartOverlay } from './components/StartOverlay';
 import { VoiceAssistantProvider } from './hooks/VoiceAssistantContext';
+import { useHoverSpeech } from './hooks/useHoverSpeech';
 import { ProgressProvider } from './hooks/useLessonProgress';
 import { VoiceListeningProvider } from './hooks/useVoiceListening';
 import { LanguageProvider } from './i18n/LanguageContext';
@@ -11,9 +12,15 @@ import { LessonPage } from './pages/LessonPage';
 import { ModulePage } from './pages/ModulePage';
 import { SectionPage } from './pages/SectionPage';
 
+function HoverSpeechListener() {
+  useHoverSpeech();
+  return null;
+}
+
 function AppShell() {
   return (
     <VoiceAssistantProvider>
+      <HoverSpeechListener />
       <div className="app">
         <StartOverlay />
         <ListeningMicBadge />

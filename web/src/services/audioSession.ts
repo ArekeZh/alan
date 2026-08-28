@@ -73,8 +73,41 @@ export async function stopPlayback() {
   audio.src = '';
 }
 
+let recordWait: { resolve: () => void; timeoutId: number } | null = null;
+let keepRecordingOnStop = false;
+
+function endRecordWait() {
+  if (!recordWait) {
+    return;
+  }
+
+  window.clearTimeout(recordWait.timeoutId);
+  const resolve = recordWait.resolve;
+  recordWait = null;
+  resolve();
+}
+
 export function cancelRecording() {
+  keepRecordingOnStop = false;
   recordGeneration += 1;
+  endRecordWait();
+}
+
+export function finishRecording() {
+  keepRecordingOnStop = true;
+  endRecordWait();
+}
+
+function waitForRecordEnd(durationMs: number) {
+  return new Promise<void>((resolve) => {
+    const timeoutId = window.setTimeout(() => {
+      if (recordWait?.resolve === resolve) {
+        recordWait = null;
+      }
+      resolve();
+    }, durationMs);
+    recordWait = { resolve, timeoutId };
+  });
 }
 
 export async function stopAllAudio() {
@@ -152,6 +185,7 @@ export async function recordWakeChunk() {
 }
 
 export async function recordPcm(durationMs: number): Promise<RecordingAudio | null> {
+  keepRecordingOnStop = false;
   const generation = ++recordGeneration;
   stopSpeaking();
   await stopPlayback();
@@ -172,7 +206,7 @@ export async function recordPcm(durationMs: number): Promise<RecordingAudio | nu
   processor.connect(mute);
   mute.connect(context.destination);
 
-  await delay(durationMs);
+  await waitForRecordEnd(durationMs);
 
   source.disconnect();
   processor.disconnect();
@@ -180,7 +214,8 @@ export async function recordPcm(durationMs: number): Promise<RecordingAudio | nu
   const sampleRate = context.sampleRate;
   await context.close();
 
-  if (generation !== recordGeneration) {
+  const wasCancelled = generation !== recordGeneration && !keepRecordingOnStop;
+  if (wasCancelled) {
     return null;
   }
 

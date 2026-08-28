@@ -32,11 +32,7 @@ export function VoiceStatusCard({
               ? t('voice.error')
               : t('voice.idle');
 
-  const listenDisabled =
-    !recognitionAvailable ||
-    status === 'speaking' ||
-    status === 'listening' ||
-    status === 'thinking';
+  const listenDisabled = !recognitionAvailable || status === 'thinking';
 
   return (
     <section
@@ -58,7 +54,7 @@ export function VoiceStatusCard({
       <div className="voice-actions">
         <AccessibleButton label={t('voice.repeat')} onPress={onRepeat} variant="secondary" />
         <AccessibleButton
-          label={t('voice.listen')}
+          label={status === 'listening' ? t('voice.stopListening') : t('voice.listen')}
           onPress={onListen}
           disabled={listenDisabled}
         />

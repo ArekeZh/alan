@@ -22,7 +22,7 @@ export function HomePage() {
         transcript={voice.transcript}
         recognitionAvailable={voice.recognitionAvailable}
         onRepeat={voice.repeatGreeting}
-        onListen={() => void voice.startListening()}
+          onListen={() => voice.toggleTalk()}
       />
 
       <LanguagePicker />

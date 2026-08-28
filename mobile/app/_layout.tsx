@@ -3,11 +3,13 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ListeningMicBadge } from '../components/ListeningMicBadge';
+import { TalkBar } from '../components/TalkBar';
 import { colors } from '../constants/theme';
-import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
+import { VoiceAssistantProvider } from '../hooks/VoiceAssistantContext';
 import { ProgressProvider } from '../hooks/useLessonProgress';
 import { VoiceListeningProvider } from '../hooks/useVoiceListening';
-import { ListeningMicBadge } from '../components/ListeningMicBadge';
+import { LanguageProvider, useLanguage } from '../i18n/LanguageContext';
 
 function RootNavigator() {
   const { isReady } = useLanguage();
@@ -21,17 +23,22 @@ function RootNavigator() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'slide_from_right',
-        }}
-      />
-      <ListeningMicBadge />
-    </View>
+    <VoiceAssistantProvider>
+      <View style={styles.root}>
+        <StatusBar style="dark" />
+        <View style={styles.screens}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background },
+              animation: 'slide_from_right',
+            }}
+          />
+          <ListeningMicBadge />
+        </View>
+        <TalkBar />
+      </View>
+    </VoiceAssistantProvider>
   );
 }
 
@@ -52,6 +59,9 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  screens: {
+    flex: 4,
   },
   loading: {
     flex: 1,

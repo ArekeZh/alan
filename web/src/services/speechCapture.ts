@@ -1,11 +1,12 @@
 import type { Language } from '../types';
 import {
+  finishRecording,
   hasBrowserSpeechRecognition,
   hasVoiceActivity,
   listenDurations,
   recognizeWithBrowser,
   recordCommand,
-  recordWakeChunk,
+  stopBrowserRecognition,
 } from './audioSession';
 import { hasEnglishSttCredentials, transcribeEnglish, usesEnglishVoice } from './englishSpeech';
 import { hasYandexCredentials, recognizeSpeech } from './yandexSpeech';
@@ -22,8 +23,9 @@ export async function listenForCommand(language: Language, forLanguagePick = fal
   return transcribeListening(language, listenDurations.command, forLanguagePick, false);
 }
 
-export async function listenForWake(language: Language) {
-  return transcribeListening(language, listenDurations.wake, false, true);
+export function stopActiveListening() {
+  finishRecording();
+  stopBrowserRecognition();
 }
 
 async function transcribeListening(
@@ -36,8 +38,7 @@ async function transcribeListening(
   const useYandexCloud = !usesEnglishVoice(language) && hasYandexCredentials();
 
   if (useEnglishCloud || useYandexCloud) {
-    const recording =
-      durationMs === listenDurations.command ? await recordCommand() : await recordWakeChunk();
+    const recording = await recordCommand();
 
     if (!recording) {
       return null;

@@ -55,6 +55,16 @@ export type RecordingAudio = {
 
 let currentPlayer: AudioPlayer | null = null;
 let currentRecorder: InstanceType<typeof AudioNativeModule.AudioRecorder> | null = null;
+let recordGate: { resolve: (uri: string | null) => void; settled: boolean } | null = null;
+
+function settleRecordGate(uri: string | null) {
+  if (!recordGate || recordGate.settled) {
+    return;
+  }
+
+  recordGate.settled = true;
+  recordGate.resolve(uri);
+}
 
 export async function requestMicPermission() {
   const permission = await requestRecordingPermissionsAsync();
@@ -77,13 +87,12 @@ export async function stopPlayback() {
   }
 }
 
-export async function stopRecording() {
-  if (!currentRecorder) {
-    return null;
-  }
-
+async function stopRecorder() {
   const recorder = currentRecorder;
   currentRecorder = null;
+  if (!recorder) {
+    return null;
+  }
 
   try {
     if (recorder.isRecording) {
@@ -95,9 +104,27 @@ export async function stopRecording() {
   }
 }
 
+export async function stopRecording() {
+  const uri = await stopRecorder();
+  settleRecordGate(uri);
+  return uri;
+}
+
+export async function finishRecording() {
+  return stopRecording();
+}
+
+export async function cancelRecording() {
+  const uri = await stopRecorder();
+  if (uri) {
+    void deleteRecording(uri);
+  }
+  settleRecordGate(null);
+}
+
 export async function stopAllAudio() {
   await stopPlayback();
-  await stopRecording();
+  await cancelRecording();
 }
 
 export async function setSpeakerMode() {
@@ -165,20 +192,25 @@ export async function playMp3Bytes(bytes: ArrayBuffer) {
 async function recordForDuration(durationMs: number): Promise<string | null> {
   await stopSpeaking();
   await stopPlayback();
-  await stopRecording();
+  await cancelRecording();
   await setRecordingMode();
 
   const recorder = new AudioNativeModule.AudioRecorder(RECORDING_OPTIONS);
   currentRecorder = recorder;
   await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
-  recorder.record({ forDuration: durationMs / 1000 });
-  await delay(durationMs + 250);
+  recorder.record();
 
-  if (currentRecorder !== recorder) {
-    return null;
-  }
+  const uri = await new Promise<string | null>((resolve) => {
+    recordGate = { resolve, settled: false };
+    setTimeout(() => {
+      if (!recordGate?.settled) {
+        void finishRecording();
+      }
+    }, durationMs);
+  });
 
-  return stopRecording();
+  recordGate = null;
+  return uri;
 }
 
 export async function recordCommand(): Promise<string | null> {

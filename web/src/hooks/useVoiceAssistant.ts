@@ -6,11 +6,17 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { delay, playAudioBytes, requestMicPermission, stopAllAudio } from '../services/audioSession';
 import { usesEnglishVoice } from '../services/englishSpeech';
 import { playConfirmSound } from '../services/feedbackSound';
-import { canRecognizeSpeech, listenForCommand, listenForWake } from '../services/speechCapture';
+import { canRecognizeSpeech, listenForCommand, stopActiveListening } from '../services/speechCapture';
 import { hasYandexCredentials, synthesizeSpeech } from '../services/yandexSpeech';
 import type { Language } from '../types';
 import { getModuleIdFromPath, getPageTitleAfterGoingBack, pathId } from '../utils/pageTitle';
-import { speakTextAsync, stopSpeaking } from '../utils/speech';
+import {
+  getHoverEpoch,
+  isHoverSpeechBlockingCommands,
+  shouldIgnoreMicFromHover,
+  speakTextAsync,
+  stopSpeaking,
+} from '../utils/speech';
 import {
   interpretSectionCommand,
   parseSpokenLanguage,
@@ -19,7 +25,6 @@ import {
   wantsInformation,
   wantsOpenFirstModule,
 } from '../utils/voiceCommands';
-import { containsWakeWord } from '../utils/wakeWord';
 import { useVoiceListening } from './useVoiceListening';
 
 export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'thinking' | 'error';
@@ -95,11 +100,11 @@ export function useVoiceAssistant({
   const statusRef = useRef<VoiceStatus>('idle');
   const previousPathnameRef = useRef<string | null>(null);
   const sessionRef = useRef(0);
-  const wakeEnabledRef = useRef(false);
   const hasGreetedRef = useRef(false);
   const previousLanguageRef = useRef<Language | null>(null);
   const startListeningRef = useRef<() => Promise<void>>(async () => {});
-  const runWakeLoopRef = useRef<(session: number) => Promise<void>>(async () => {});
+  const toggleTalkRef = useRef<() => void>(() => {});
+  const followUpWaitRef = useRef<((started: boolean) => void) | null>(null);
   const actOnCommandRef = useRef<(spoken: string, session: number) => Promise<boolean>>(
     async () => false,
   );
@@ -128,15 +133,15 @@ export function useVoiceAssistant({
     await playAudioBytes(audio);
   }, []);
 
-  const resumeWakeListening = useCallback(
+  const resumeWaiting = useCallback(
     (session: number) => {
       if (!isCurrent(session)) {
         return;
       }
 
-      wakeEnabledRef.current = true;
+      followUpWaitRef.current?.(false);
+      followUpWaitRef.current = null;
       setStatus('waiting');
-      void runWakeLoopRef.current(session);
     },
     [isCurrent],
   );
@@ -146,10 +151,27 @@ export function useVoiceAssistant({
   >(async () => null);
 
   listenFollowUpRef.current = async (session, forLanguagePick) => {
+    setStatus('waiting');
+    const started = await new Promise<boolean>((resolve) => {
+      followUpWaitRef.current = (value) => {
+        followUpWaitRef.current = null;
+        resolve(value);
+      };
+    });
+    if (!started || !isCurrent(session)) {
+      return null;
+    }
+
     setStatus('listening');
+    playConfirmSound();
+    const hoverEpochBefore = getHoverEpoch();
     const spoken = await listenForCommand(languageRef.current, forLanguagePick);
     if (!isCurrent(session)) {
       return null;
+    }
+
+    if (shouldIgnoreMicFromHover(hoverEpochBefore)) {
+      return '';
     }
 
     setStatus('thinking');
@@ -157,9 +179,12 @@ export function useVoiceAssistant({
   };
 
   actOnCommandRef.current = async (spoken: string, session: number) => {
+    if (isHoverSpeechBlockingCommands()) {
+      return false;
+    }
+
     if (wantsChangeLanguage(spoken)) {
       setTranscript(spoken);
-      wakeEnabledRef.current = false;
       playConfirmSound();
 
       const applyLanguageChoice = async (nextLanguage: Language) => {
@@ -167,7 +192,7 @@ export function useVoiceAssistant({
         if (isSameLanguage) {
           setStatus('speaking');
           await speak(tRef.current('voice.alreadyThisLanguage'), languageRef.current);
-          resumeWakeListening(session);
+          resumeWaiting(session);
           return true;
         }
 
@@ -197,7 +222,7 @@ export function useVoiceAssistant({
       if (!chosenLanguage) {
         setStatus('speaking');
         await speak(tRef.current('voice.didNotUnderstandLanguage'), languageRef.current);
-        resumeWakeListening(session);
+        resumeWaiting(session);
         return true;
       }
 
@@ -206,7 +231,6 @@ export function useVoiceAssistant({
 
     if (wantsOpenFirstModule(spoken)) {
       setTranscript(spoken);
-      wakeEnabledRef.current = false;
       playConfirmSound();
       statusRef.current = 'speaking';
       setStatus('speaking');
@@ -224,7 +248,7 @@ export function useVoiceAssistant({
         : tRef.current('voice.openingModule');
       await speak(enteredSpeech, languageRef.current);
       if (isCurrent(session)) {
-        resumeWakeListening(session);
+        resumeWaiting(session);
       }
       return true;
     }
@@ -233,12 +257,11 @@ export function useVoiceAssistant({
 
     if (wantsInformation(spoken) && currentModuleId) {
       setTranscript(spoken);
-      wakeEnabledRef.current = false;
       playConfirmSound();
       setStatus('speaking');
       await speak(buildSectionListSpeech(currentModuleId, tRef.current), languageRef.current);
       if (isCurrent(session)) {
-        resumeWakeListening(session);
+        resumeWaiting(session);
       }
       return true;
     }
@@ -256,7 +279,6 @@ export function useVoiceAssistant({
           : '';
 
         setTranscript(spoken);
-        wakeEnabledRef.current = false;
         playConfirmSound();
         setStatus('speaking');
         await speak(
@@ -265,18 +287,17 @@ export function useVoiceAssistant({
         );
         if (isCurrent(session)) {
           openSectionRef.current(sectionCommand.id);
-          resumeWakeListening(session);
+          resumeWaiting(session);
         }
         return true;
       }
 
       if (sectionCommand.kind === 'unknown') {
         setTranscript(spoken);
-        wakeEnabledRef.current = false;
         setStatus('speaking');
         await speak(tRef.current('voice.unknownSection'), languageRef.current);
         if (isCurrent(session)) {
-          resumeWakeListening(session);
+          resumeWaiting(session);
         }
         return true;
       }
@@ -287,7 +308,6 @@ export function useVoiceAssistant({
     }
 
     setTranscript(spoken);
-    wakeEnabledRef.current = false;
     playConfirmSound();
 
     const leavingSectionId = pathId(pathnameRef.current, 'section');
@@ -311,74 +331,19 @@ export function useVoiceAssistant({
         }),
         languageRef.current,
       );
-      resumeWakeListening(session);
+      resumeWaiting(session);
       return true;
     }
 
     const announcedPage = didGoBack ? pageTitle : tRef.current('voice.homePageName');
     await speak(tRef.current('voice.nowOnPage', { page: announcedPage }), languageRef.current);
-    resumeWakeListening(session);
+    resumeWaiting(session);
     return true;
   };
 
-  runWakeLoopRef.current = async (session: number) => {
-    const micGranted = await requestMicPermission();
-    if (!isCurrent(session) || !wakeEnabledRef.current) {
-      return;
-    }
-
-    if (!micGranted) {
-      setStatus('error');
-      await speak(tRef.current('voice.micDenied'), languageRef.current);
-      if (isCurrent(session)) {
-        setStatus('idle');
-      }
-      return;
-    }
-
-    setStatus('waiting');
-
-    while (wakeEnabledRef.current && isCurrent(session)) {
-      try {
-        const spoken = await listenForWake(languageRef.current);
-        if (!wakeEnabledRef.current || !isCurrent(session)) {
-          return;
-        }
-        if (spoken === null) {
-          await delay(150);
-          continue;
-        }
-        if (!spoken) {
-          continue;
-        }
-
-        if (await actOnCommandRef.current(spoken, session)) {
-          return;
-        }
-
-        if (!containsWakeWord(spoken)) {
-          continue;
-        }
-
-        setTranscript(spoken);
-        playConfirmSound();
-        wakeEnabledRef.current = false;
-        await startListeningRef.current();
-        return;
-      } catch (error) {
-        if (!wakeEnabledRef.current || !isCurrent(session)) {
-          return;
-        }
-        if (import.meta.env.DEV) {
-          console.warn('Wake word listen failed', error);
-        }
-        await delay(500);
-      }
-    }
-  };
-
   const startListening = useCallback(async () => {
-    wakeEnabledRef.current = false;
+    followUpWaitRef.current?.(false);
+    followUpWaitRef.current = null;
     const session = ++sessionRef.current;
     setTranscript('');
 
@@ -400,23 +365,25 @@ export function useVoiceAssistant({
     playConfirmSound();
 
     try {
+      const hoverEpochBefore = getHoverEpoch();
       const spoken = await listenForCommand(languageRef.current);
       if (!isCurrent(session)) {
         return;
       }
-      if (spoken === null) {
-        resumeWakeListening(session);
+      if (spoken === null || shouldIgnoreMicFromHover(hoverEpochBefore)) {
+        resumeWaiting(session);
+        return;
+      }
+
+      const spokenText = spoken.trim();
+      if (!spokenText) {
+        resumeWaiting(session);
         return;
       }
 
       setStatus('thinking');
 
-      if (await actOnCommandRef.current(spoken, session)) {
-        return;
-      }
-
-      if (containsWakeWord(spoken)) {
-        await startListeningRef.current();
+      if (await actOnCommandRef.current(spokenText, session)) {
         return;
       }
 
@@ -426,7 +393,7 @@ export function useVoiceAssistant({
         ? 'voice.didNotUnderstandOnModule'
         : 'voice.didNotUnderstand';
       await speak(tRef.current(notUnderstoodKey), languageRef.current);
-      resumeWakeListening(session);
+      resumeWaiting(session);
     } catch (error) {
       if (!isCurrent(session)) {
         return;
@@ -442,11 +409,32 @@ export function useVoiceAssistant({
       } catch {
         // Browser may block speech after a mic error.
       }
-      resumeWakeListening(session);
+      resumeWaiting(session);
     }
-  }, [isCurrent, resumeWakeListening, speak]);
+  }, [isCurrent, resumeWaiting, speak]);
 
   startListeningRef.current = startListening;
+
+  const toggleTalk = useCallback(() => {
+    if (statusRef.current === 'thinking') {
+      return;
+    }
+
+    if (statusRef.current === 'listening') {
+      playConfirmSound();
+      stopActiveListening();
+      return;
+    }
+
+    if (followUpWaitRef.current) {
+      followUpWaitRef.current(true);
+      return;
+    }
+
+    void startListeningRef.current();
+  }, []);
+
+  toggleTalkRef.current = toggleTalk;
 
   useEffect(() => {
     const micIsOn = status === 'listening';
@@ -457,8 +445,33 @@ export function useVoiceAssistant({
     return () => setIsListening(false);
   }, [setIsListening]);
 
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) {
+        return;
+      }
+
+      const isSpace = event.code === 'Space' || event.key === ' ';
+      if (!isSpace) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      toggleTalkRef.current();
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [enabled]);
+
   const speakGreeting = useCallback(async () => {
-    wakeEnabledRef.current = false;
+    followUpWaitRef.current?.(false);
+    followUpWaitRef.current = null;
     const session = ++sessionRef.current;
     await stopAllAudio();
     setStatus('speaking');
@@ -475,19 +488,18 @@ export function useVoiceAssistant({
         return;
       }
 
-      await delay(400);
-      await startListening();
+      resumeWaiting(session);
     } catch {
       if (isCurrent(session)) {
         setStatus('error');
       }
     }
-  }, [isCurrent, speak, startListening]);
+  }, [isCurrent, resumeWaiting, speak]);
 
   const speakGreetingRef = useRef(speakGreeting);
-  const resumeWakeRef = useRef(resumeWakeListening);
+  const resumeWakeRef = useRef(resumeWaiting);
   speakGreetingRef.current = speakGreeting;
-  resumeWakeRef.current = resumeWakeListening;
+  resumeWakeRef.current = resumeWaiting;
 
   useEffect(() => {
     const onVisibility = () => {
@@ -502,7 +514,8 @@ export function useVoiceAssistant({
     const canRun = enabled && engineReady && appActive;
 
     if (!canRun) {
-      wakeEnabledRef.current = false;
+      followUpWaitRef.current?.(false);
+      followUpWaitRef.current = null;
       sessionRef.current += 1;
       void stopAllAudio();
       setStatus('idle');
@@ -521,7 +534,8 @@ export function useVoiceAssistant({
     }
 
     return () => {
-      wakeEnabledRef.current = false;
+      followUpWaitRef.current?.(false);
+      followUpWaitRef.current = null;
       sessionRef.current += 1;
       void stopAllAudio();
     };
@@ -555,21 +569,21 @@ export function useVoiceAssistant({
     }
 
     const session = ++sessionRef.current;
-    wakeEnabledRef.current = false;
     statusRef.current = 'speaking';
 
     void (async () => {
       setStatus('speaking');
       await speak(enteredSpeech, languageRef.current);
       if (isCurrent(session)) {
-        resumeWakeListening(session);
+        resumeWaiting(session);
       }
     })();
-  }, [isCurrent, pathname, resumeWakeListening, speak]);
+  }, [isCurrent, pathname, resumeWaiting, speak]);
 
   useEffect(() => {
     return () => {
-      wakeEnabledRef.current = false;
+      followUpWaitRef.current?.(false);
+      followUpWaitRef.current = null;
       sessionRef.current += 1;
       void stopAllAudio();
     };
@@ -585,5 +599,6 @@ export function useVoiceAssistant({
     recognitionAvailable,
     repeatGreeting,
     startListening,
+    toggleTalk,
   };
 }

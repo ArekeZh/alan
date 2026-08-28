@@ -1,17 +1,14 @@
-import { useLocation, useNavigate } from 'react-router';
+import { router, usePathname } from 'expo-router';
 import {
   createContext,
+  ReactNode,
   useCallback,
   useContext,
   useMemo,
-  useState,
-  type ReactNode,
 } from 'react';
 
 import { getModule, modules } from '../data/content';
 import { useLanguage } from '../i18n/LanguageContext';
-import { requestMicPermission } from '../services/audioSession';
-import { unlockAudio } from '../services/feedbackSound';
 import { useLessonProgress } from './useLessonProgress';
 import { useVoiceAssistant, type VoiceStatus } from './useVoiceAssistant';
 
@@ -22,16 +19,12 @@ type VoiceAssistantContextValue = {
   repeatGreeting: () => void;
   startListening: () => Promise<void>;
   toggleTalk: () => void;
-  audioUnlocked: boolean;
-  unlockAudioSession: () => Promise<void>;
 };
 
 const VoiceAssistantContext = createContext<VoiceAssistantContextValue | null>(null);
 
 export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const pathname = usePathname();
   const { t } = useLanguage();
   const { isReady, lastOpenedModuleId } = useLessonProgress();
 
@@ -49,36 +42,27 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   }, [lastModule, progressModuleTitle, t]);
 
   const onOpenFirstModule = useCallback(() => {
-    navigate(`/module/${firstModule.id}`);
-  }, [firstModule.id, navigate]);
+    router.push(`/module/${firstModule.id}`);
+  }, [firstModule.id]);
 
-  const onOpenSection = useCallback(
-    (sectionId: string) => {
-      navigate(`/section/${sectionId}`);
-    },
-    [navigate],
-  );
+  const onOpenSection = useCallback((sectionId: string) => {
+    router.push(`/section/${sectionId}`);
+  }, []);
 
   const onGoBack = useCallback(() => {
-    if (location.pathname === '/') {
+    if (pathname === '/' || !router.canGoBack()) {
       return false;
     }
-    void navigate(-1);
+    router.back();
     return true;
-  }, [location.pathname, navigate]);
-
-  const unlockAudioSession = useCallback(async () => {
-    await unlockAudio();
-    await requestMicPermission();
-    setAudioUnlocked(true);
-  }, []);
+  }, [pathname]);
 
   const voice = useVoiceAssistant({
     greeting,
     onOpenFirstModule,
     onOpenSection,
     onGoBack,
-    enabled: isReady && audioUnlocked,
+    enabled: isReady,
   });
 
   const value = useMemo(
@@ -89,12 +73,8 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
       repeatGreeting: voice.repeatGreeting,
       startListening: voice.startListening,
       toggleTalk: voice.toggleTalk,
-      audioUnlocked,
-      unlockAudioSession,
     }),
     [
-      audioUnlocked,
-      unlockAudioSession,
       voice.recognitionAvailable,
       voice.repeatGreeting,
       voice.startListening,
