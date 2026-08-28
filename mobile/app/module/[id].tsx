@@ -43,17 +43,17 @@ export default function ModuleScreen() {
 
         <Text style={styles.sectionTitle}>{t('common.section')}</Text>
 
-        {moduleSections.map((section) => {
+        {moduleSections.map((section, index) => {
           const title = t(`${section.translationKey}.title`);
           const description = t(section.descriptionKey);
 
           return (
             <CardButton
               key={section.id}
-              title={title}
+              title={`${index + 1}. ${title}`}
               description={description}
               badge={`${section.lessonIds.length} ${t('common.lesson')}`}
-              accessibilityLabel={`${title}. ${description}`}
+              accessibilityLabel={`${t('common.section')} ${index + 1}. ${title}. ${description}`}
               accessibilityHint={t('common.openSection')}
               onPress={() => router.push(`/section/${section.id}`)}
             />

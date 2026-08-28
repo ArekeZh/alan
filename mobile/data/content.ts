@@ -1,12 +1,25 @@
 import { Exercise, Lesson, Module, Section } from '../types';
 
+function computeAnswer(type: Exercise['type'], a: number, b: number) {
+  if (type === 'addition') {
+    return a + b;
+  }
+  if (type === 'subtraction') {
+    return a - b;
+  }
+  if (type === 'multiplication') {
+    return a * b;
+  }
+  return a / b;
+}
+
 function makeExercise(
   id: string,
   type: Exercise['type'],
   a: number,
   b: number,
 ): Exercise {
-  const answer = type === 'addition' ? a + b : a - b;
+  const answer = computeAnswer(type, a, b);
   const distractors = new Set<number>();
 
   while (distractors.size < 3) {
@@ -27,7 +40,7 @@ export const modules: Module[] = [
     id: 'module-basic',
     translationKey: 'modules.basicArithmetic',
     descriptionKey: 'modules.basicArithmetic.description',
-    sectionIds: ['section-add-subtract'],
+    sectionIds: ['section-add-subtract', 'section-multiply', 'section-divide'],
   },
 ];
 
@@ -38,6 +51,39 @@ export const sections: Section[] = [
     translationKey: 'sections.addSubtract',
     descriptionKey: 'sections.addSubtract.description',
     lessonIds: ['lesson-addition', 'lesson-subtraction', 'lesson-mixed'],
+    voiceAliases: [
+      'қосу',
+      'алу',
+      'сложение',
+      'вычитание',
+      'addition',
+      'subtraction',
+      'add',
+      'subtract',
+    ],
+  },
+  {
+    id: 'section-multiply',
+    moduleId: 'module-basic',
+    translationKey: 'sections.multiply',
+    descriptionKey: 'sections.multiply.description',
+    lessonIds: ['lesson-multiplication'],
+    voiceAliases: [
+      'көбейту',
+      'кобейту',
+      'умножение',
+      'умножения',
+      'multiplication',
+      'multiply',
+    ],
+  },
+  {
+    id: 'section-divide',
+    moduleId: 'module-basic',
+    translationKey: 'sections.divide',
+    descriptionKey: 'sections.divide.description',
+    lessonIds: ['lesson-division'],
+    voiceAliases: ['бөлу', 'деление', 'деления', 'division', 'divide'],
   },
 ];
 
@@ -81,6 +127,32 @@ export const lessons: Lesson[] = [
       makeExercise('mix-5', 'addition', 4, 5),
     ],
   },
+  {
+    id: 'lesson-multiplication',
+    sectionId: 'section-multiply',
+    translationKey: 'lessons.multiplicationBasics',
+    descriptionKey: 'lessons.multiplicationBasics.description',
+    exercises: [
+      makeExercise('mul-1', 'multiplication', 2, 3),
+      makeExercise('mul-2', 'multiplication', 3, 3),
+      makeExercise('mul-3', 'multiplication', 4, 2),
+      makeExercise('mul-4', 'multiplication', 5, 2),
+      makeExercise('mul-5', 'multiplication', 3, 4),
+    ],
+  },
+  {
+    id: 'lesson-division',
+    sectionId: 'section-divide',
+    translationKey: 'lessons.divisionBasics',
+    descriptionKey: 'lessons.divisionBasics.description',
+    exercises: [
+      makeExercise('div-1', 'division', 6, 2),
+      makeExercise('div-2', 'division', 8, 2),
+      makeExercise('div-3', 'division', 9, 3),
+      makeExercise('div-4', 'division', 10, 5),
+      makeExercise('div-5', 'division', 12, 4),
+    ],
+  },
 ];
 
 export function getModule(id: string) {
@@ -96,7 +168,14 @@ export function getLesson(id: string) {
 }
 
 export function getSectionsForModule(moduleId: string) {
-  return sections.filter((section) => section.moduleId === moduleId);
+  const module = getModule(moduleId);
+  if (!module) {
+    return sections.filter((section) => section.moduleId === moduleId);
+  }
+
+  return module.sectionIds
+    .map((sectionId) => sections.find((section) => section.id === sectionId))
+    .filter((section): section is Section => Boolean(section));
 }
 
 export function getLessonsForSection(sectionId: string) {
@@ -104,5 +183,5 @@ export function getLessonsForSection(sectionId: string) {
 }
 
 export function getCorrectAnswer(exercise: Exercise) {
-  return exercise.type === 'addition' ? exercise.a + exercise.b : exercise.a - exercise.b;
+  return computeAnswer(exercise.type, exercise.a, exercise.b);
 }

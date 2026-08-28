@@ -34,12 +34,14 @@ export default function LessonScreen() {
       return '';
     }
 
-    const key =
-      exercise.type === 'addition'
-        ? 'exercise.questionAddition'
-        : 'exercise.questionSubtraction';
+    const questionKeyByType = {
+      addition: 'exercise.questionAddition',
+      subtraction: 'exercise.questionSubtraction',
+      multiplication: 'exercise.questionMultiplication',
+      division: 'exercise.questionDivision',
+    } as const;
 
-    return t(key, { a: exercise.a, b: exercise.b });
+    return t(questionKeyByType[exercise.type], { a: exercise.a, b: exercise.b });
   }, [exercise, t]);
 
   if (!lesson || !exercise) {

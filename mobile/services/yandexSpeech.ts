@@ -290,17 +290,17 @@ async function startRecognitionV3(
         model: 'general',
         audioFormat: useWav
           ? {
-              containerAudio: {
-                containerAudioType: 'WAV',
-              },
-            }
-          : {
-              rawAudio: {
-                audioEncoding: 'LINEAR16_PCM',
-                sampleRateHertz: String(recording.sampleRate),
-                audioChannelCount: '1',
-              },
+            containerAudio: {
+              containerAudioType: 'WAV',
             },
+          }
+          : {
+            rawAudio: {
+              audioEncoding: 'LINEAR16_PCM',
+              sampleRateHertz: String(recording.sampleRate),
+              audioChannelCount: '1',
+            },
+          },
         languageRestriction: {
           restrictionType: 'WHITELIST',
           languageCode: allLanguages ? ['kk-KZ', 'ru-RU', 'en-US'] : [STT_LANG[language]],

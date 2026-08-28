@@ -28,9 +28,17 @@ import {
   synthesizeSpeech,
 } from '../services/yandexSpeech';
 import { Language } from '../types';
-import { getPageTitleAfterGoingBack } from '../utils/pageTitle';
+import { getModule, getSection, getSectionsForModule, modules } from '../data/content';
+import { getModuleIdFromPath, getPageTitleAfterGoingBack, pathId } from '../utils/pageTitle';
 import { speakTextAsync, stopSpeaking } from '../utils/speech';
-import { wantsChangeLanguage, wantsGoBack, wantsOpenFirstModule, parseSpokenLanguage } from '../utils/voiceCommands';
+import {
+  interpretSectionCommand,
+  parseSpokenLanguage,
+  wantsChangeLanguage,
+  wantsGoBack,
+  wantsInformation,
+  wantsOpenFirstModule,
+} from '../utils/voiceCommands';
 import { containsWakeWord } from '../utils/wakeWord';
 
 export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'thinking' | 'error';
@@ -38,9 +46,42 @@ export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'think
 type UseVoiceAssistantOptions = {
   greeting: string;
   onOpenFirstModule: () => void;
+  onOpenSection: (sectionId: string) => void;
   onGoBack: () => boolean;
   enabled: boolean;
 };
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function getModuleEnteredSpeech(pathname: string, t: Translate) {
+  const moduleId = getModuleIdFromPath(pathname);
+  const module = moduleId ? getModule(moduleId) : undefined;
+  if (!module) {
+    return null;
+  }
+
+  return t('voice.enteredModule', {
+    module: t(`${module.translationKey}.title`),
+  });
+}
+
+function getSpokenSectionOptions(moduleId: string, t: Translate) {
+  return getSectionsForModule(moduleId).map((section) => ({
+    id: section.id,
+    names: [t(`${section.translationKey}.title`), ...section.voiceAliases],
+  }));
+}
+
+function buildSectionListSpeech(moduleId: string, t: Translate) {
+  return getSectionsForModule(moduleId)
+    .map((section, index) =>
+      t('voice.sectionListItem', {
+        ordinal: t(`voice.ordinal.${index + 1}`),
+        name: t(`${section.translationKey}.title`),
+      }),
+    )
+    .join(', ');
+}
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -73,6 +114,7 @@ async function transcribeLanguageChoice(
 export function useVoiceAssistant({
   greeting,
   onOpenFirstModule,
+  onOpenSection,
   onGoBack,
   enabled,
 }: UseVoiceAssistantOptions) {
@@ -89,16 +131,19 @@ export function useVoiceAssistant({
   const greetingRef = useRef(greeting);
   const languageRef = useRef(language);
   const openModuleRef = useRef(onOpenFirstModule);
+  const openSectionRef = useRef(onOpenSection);
   const goBackRef = useRef(onGoBack);
   const tRef = useRef(t);
   const pathnameRef = useRef(pathname);
   const setLanguageRef = useRef(setLanguage);
+  const statusRef = useRef<VoiceStatus>('idle');
+  const previousPathnameRef = useRef<string | null>(null);
   const sessionRef = useRef(0);
   const wakeEnabledRef = useRef(false);
   const hasGreetedRef = useRef(false);
   const previousLanguageRef = useRef<Language | null>(null);
-  const startListeningRef = useRef<() => Promise<void>>(async () => {});
-  const runWakeLoopRef = useRef<(session: number) => Promise<void>>(async () => {});
+  const startListeningRef = useRef<() => Promise<void>>(async () => { });
+  const runWakeLoopRef = useRef<(session: number) => Promise<void>>(async () => { });
   const actOnCommandRef = useRef<(spoken: string, session: number) => Promise<boolean>>(
     async () => false,
   );
@@ -106,10 +151,12 @@ export function useVoiceAssistant({
   greetingRef.current = greeting;
   languageRef.current = language;
   openModuleRef.current = onOpenFirstModule;
+  openSectionRef.current = onOpenSection;
   goBackRef.current = onGoBack;
   tRef.current = t;
   pathnameRef.current = pathname;
   setLanguageRef.current = setLanguage;
+  statusRef.current = status;
 
   const isCurrent = useCallback((session: number) => session === sessionRef.current, []);
 
@@ -223,13 +270,79 @@ export function useVoiceAssistant({
     if (wantsOpenFirstModule(spoken)) {
       setTranscript(spoken);
       wakeEnabledRef.current = false;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      statusRef.current = 'speaking';
       setStatus('speaking');
-      await speak(tRef.current('voice.openingModule'), languageRef.current);
+      openModuleRef.current();
+      await delay(400);
+      if (!isCurrent(session)) {
+        return true;
+      }
+
+      const firstModule = modules[0];
+      const enteredSpeech = firstModule
+        ? tRef.current('voice.enteredModule', {
+            module: tRef.current(`${firstModule.translationKey}.title`),
+          })
+        : tRef.current('voice.openingModule');
+      await speak(enteredSpeech, languageRef.current);
       if (isCurrent(session)) {
-        openModuleRef.current();
         resumeWakeListening(session);
       }
       return true;
+    }
+
+    const currentModuleId = getModuleIdFromPath(pathnameRef.current);
+
+    if (wantsInformation(spoken) && currentModuleId) {
+      setTranscript(spoken);
+      wakeEnabledRef.current = false;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStatus('speaking');
+      await speak(buildSectionListSpeech(currentModuleId, tRef.current), languageRef.current);
+      if (isCurrent(session)) {
+        resumeWakeListening(session);
+      }
+      return true;
+    }
+
+    if (currentModuleId) {
+      const sectionCommand = interpretSectionCommand(
+        spoken,
+        getSpokenSectionOptions(currentModuleId, tRef.current),
+      );
+
+      if (sectionCommand.kind === 'match') {
+        const section = getSection(sectionCommand.id);
+        const sectionTitle = section
+          ? tRef.current(`${section.translationKey}.title`)
+          : '';
+
+        setTranscript(spoken);
+        wakeEnabledRef.current = false;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setStatus('speaking');
+        await speak(
+          tRef.current('voice.openingSection', { section: sectionTitle }),
+          languageRef.current,
+        );
+        if (isCurrent(session)) {
+          openSectionRef.current(sectionCommand.id);
+          resumeWakeListening(session);
+        }
+        return true;
+      }
+
+      if (sectionCommand.kind === 'unknown') {
+        setTranscript(spoken);
+        wakeEnabledRef.current = false;
+        setStatus('speaking');
+        await speak(tRef.current('voice.unknownSection'), languageRef.current);
+        if (isCurrent(session)) {
+          resumeWakeListening(session);
+        }
+        return true;
+      }
     }
 
     if (!wantsGoBack(spoken)) {
@@ -240,14 +353,32 @@ export function useVoiceAssistant({
     wakeEnabledRef.current = false;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    const leavingSectionId = pathId(pathnameRef.current, 'section');
+    const leavingSection = leavingSectionId ? getSection(leavingSectionId) : undefined;
+    const moduleAfterBack = leavingSection ? getModule(leavingSection.moduleId) : undefined;
+
     const pageTitle = getPageTitleAfterGoingBack(pathnameRef.current, tRef.current);
+    statusRef.current = 'speaking';
+    setStatus('speaking');
     const didGoBack = goBackRef.current();
     if (!isCurrent(session)) {
       return true;
     }
 
+    const shouldAnnounceModule = didGoBack && moduleAfterBack;
+    if (shouldAnnounceModule) {
+      await delay(300);
+      await speak(
+        tRef.current('voice.enteredModule', {
+          module: tRef.current(`${moduleAfterBack.translationKey}.title`),
+        }),
+        languageRef.current,
+      );
+      resumeWakeListening(session);
+      return true;
+    }
+
     const announcedPage = didGoBack ? pageTitle : tRef.current('voice.homePageName');
-    setStatus('speaking');
     await speak(tRef.current('voice.nowOnPage', { page: announcedPage }), languageRef.current);
     resumeWakeListening(session);
     return true;
@@ -386,7 +517,10 @@ export function useVoiceAssistant({
 
       setTranscript(spoken);
       setStatus('speaking');
-      await speak(tRef.current('voice.didNotUnderstand'), languageRef.current);
+      const notUnderstoodKey = getModuleIdFromPath(pathnameRef.current)
+        ? 'voice.didNotUnderstandOnModule'
+        : 'voice.didNotUnderstand';
+      await speak(tRef.current(notUnderstoodKey), languageRef.current);
       resumeWakeListening(session);
     } catch (error) {
       if (!isCurrent(session)) {
@@ -499,6 +633,46 @@ export function useVoiceAssistant({
       stopAllAudio();
     };
   }, [appActive, enabled, englishVoice, language, yandexReady]);
+
+  useEffect(() => {
+    const previousPath = previousPathnameRef.current;
+    previousPathnameRef.current = pathname;
+
+    if (previousPath === null) {
+      return;
+    }
+
+    const arrivedAtModule =
+      Boolean(getModuleIdFromPath(pathname)) &&
+      getModuleIdFromPath(previousPath) !== getModuleIdFromPath(pathname);
+
+    if (!arrivedAtModule || !hasGreetedRef.current) {
+      return;
+    }
+
+    const isVoiceNavigating =
+      statusRef.current === 'speaking' || statusRef.current === 'thinking';
+    if (isVoiceNavigating) {
+      return;
+    }
+
+    const enteredSpeech = getModuleEnteredSpeech(pathname, tRef.current);
+    if (!enteredSpeech) {
+      return;
+    }
+
+    const session = ++sessionRef.current;
+    wakeEnabledRef.current = false;
+    statusRef.current = 'speaking';
+
+    void (async () => {
+      setStatus('speaking');
+      await speak(enteredSpeech, languageRef.current);
+      if (isCurrent(session)) {
+        resumeWakeListening(session);
+      }
+    })();
+  }, [isCurrent, pathname, resumeWakeListening, speak]);
 
   useEffect(() => {
     return () => {

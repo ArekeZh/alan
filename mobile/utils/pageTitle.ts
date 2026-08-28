@@ -2,9 +2,18 @@ import { getLesson, getModule, getSection } from '../data/content';
 
 type Translate = (key: string) => string;
 
-function pathId(pathname: string, kind: 'module' | 'section' | 'lesson') {
+export function pathId(pathname: string, kind: 'module' | 'section' | 'lesson') {
   const match = pathname.match(new RegExp(`/${kind}/([^/?]+)`));
   return match?.[1];
+}
+
+export function getModuleIdFromPath(pathname: string) {
+  const isInsideSection = Boolean(pathId(pathname, 'section') || pathId(pathname, 'lesson'));
+  if (isInsideSection) {
+    return undefined;
+  }
+
+  return pathId(pathname, 'module');
 }
 
 export function getPageTitleAfterGoingBack(pathname: string, t: Translate) {

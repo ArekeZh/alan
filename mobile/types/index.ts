@@ -1,6 +1,6 @@
 export type Language = 'kk' | 'ru' | 'en';
 
-export type ExerciseType = 'addition' | 'subtraction';
+export type ExerciseType = 'addition' | 'subtraction' | 'multiplication' | 'division';
 
 export type Exercise = {
   id: string;
@@ -24,6 +24,7 @@ export type Section = {
   translationKey: string;
   descriptionKey: string;
   lessonIds: string[];
+  voiceAliases: string[];
 };
 
 export type Module = {

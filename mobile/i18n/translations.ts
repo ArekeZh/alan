@@ -38,6 +38,25 @@ const translations: Record<Language, TranslationValue> = {
       progressAtModule: 'Сіз тоқтаған жер. Модуль: {{module}}.',
       askCommand: 'Алан деп айтыңыз. Сосын: модульге көш. Артқа — кері оралу. Тіл — тілді ауыстыру.',
       openingModule: 'Бірінші модульді ашамын.',
+      enteredModule:
+        'Сіз модульдесіз: {{module}}. Қандай бөлімдер бар екенін есту үшін «ақпарат» деп айтыңыз.',
+      sectionListItem: '{{ordinal}} бөлім) {{name}}',
+      openingSection: '{{section}} бөлімін ашамын.',
+      unknownSection: 'Мұндай бөлім жоқ. Тізімді есту үшін «ақпарат» деп айтыңыз.',
+      didNotUnderstandOnModule:
+        'Түсінбедім. Алан деп айтыңыз. Ақпарат — бөлімдер тізімі. Немесе бөлімнің атын немесе нөмірін айтыңыз.',
+      ordinal: {
+        '1': 'бірінші',
+        '2': 'екінші',
+        '3': 'үшінші',
+        '4': 'төртінші',
+        '5': 'бесінші',
+        '6': 'алтыншы',
+        '7': 'жетінші',
+        '8': 'сегізінші',
+        '9': 'тоғызыншы',
+        '10': 'оныншы',
+      },
       nowOnPage: 'Қазір сіз беттесізде: {{page}}.',
       homePageName: 'Басты бет',
       speaking: 'Сөйлеп тұрмын',
@@ -68,6 +87,14 @@ const translations: Record<Language, TranslationValue> = {
         title: 'Қосу және алу',
         description: 'Оң санмен қарапайым есептер',
       },
+      multiply: {
+        title: 'Көбейту',
+        description: 'Кіші сандарды көбейту',
+      },
+      divide: {
+        title: 'Бөлу',
+        description: 'Санды қалдықсыз бөлу',
+      },
     },
     lessons: {
       additionBasics: {
@@ -82,10 +109,20 @@ const translations: Record<Language, TranslationValue> = {
         title: 'Аралас тапсырма',
         description: 'Қосу мен алуды бірге шешу',
       },
+      multiplicationBasics: {
+        title: 'Көбейту негіздері',
+        description: 'Екі санны көбейту',
+      },
+      divisionBasics: {
+        title: 'Бөлу негіздері',
+        description: 'Санны қалдықсыз бөлу',
+      },
     },
     exercise: {
       questionAddition: '{{a}} + {{b}} = ?',
       questionSubtraction: '{{a}} − {{b}} = ?',
+      questionMultiplication: '{{a}} × {{b}} = ?',
+      questionDivision: '{{a}} ÷ {{b}} = ?',
       chooseAnswer: 'Жауапты таңдаңыз',
       exerciseProgress: 'Тапсырма {{current}} / {{total}}',
     },
@@ -130,6 +167,25 @@ const translations: Record<Language, TranslationValue> = {
       progressAtModule: 'Вы остановились на модуле: {{module}}.',
       askCommand: 'Скажите «Алан». Затем: модульге көш. «Артқа» — назад. «Язык» — сменить язык.',
       openingModule: 'Открываю первый модуль.',
+      enteredModule:
+        'Вы в модуле {{module}}. Чтобы услышать, какие разделы доступны, скажите «информация».',
+      sectionListItem: '{{ordinal}} раздел) {{name}}',
+      openingSection: 'Открываю раздел {{section}}.',
+      unknownSection: 'Такого раздела нет. Чтобы услышать список, скажите «информация».',
+      didNotUnderstandOnModule:
+        'Не понял. Скажите «Алан». «Информация» — список разделов. Или назовите раздел или его номер.',
+      ordinal: {
+        '1': 'первый',
+        '2': 'второй',
+        '3': 'третий',
+        '4': 'четвёртый',
+        '5': 'пятый',
+        '6': 'шестой',
+        '7': 'седьмой',
+        '8': 'восьмой',
+        '9': 'девятый',
+        '10': 'десятый',
+      },
       nowOnPage: 'Сейчас вы на странице: {{page}}.',
       homePageName: 'Главная',
       speaking: 'Говорю',
@@ -160,6 +216,14 @@ const translations: Record<Language, TranslationValue> = {
         title: 'Сложение и вычитание',
         description: 'Простые задачи с положительными числами',
       },
+      multiply: {
+        title: 'Умножение',
+        description: 'Умножение небольших чисел',
+      },
+      divide: {
+        title: 'Деление',
+        description: 'Деление без остатка',
+      },
     },
     lessons: {
       additionBasics: {
@@ -174,10 +238,20 @@ const translations: Record<Language, TranslationValue> = {
         title: 'Смешанная практика',
         description: 'Сложение и вычитание вместе',
       },
+      multiplicationBasics: {
+        title: 'Основы умножения',
+        description: 'Умножение двух чисел',
+      },
+      divisionBasics: {
+        title: 'Основы деления',
+        description: 'Деление без остатка',
+      },
     },
     exercise: {
       questionAddition: '{{a}} + {{b}} = ?',
       questionSubtraction: '{{a}} − {{b}} = ?',
+      questionMultiplication: '{{a}} × {{b}} = ?',
+      questionDivision: '{{a}} ÷ {{b}} = ?',
       chooseAnswer: 'Выберите ответ',
       exerciseProgress: 'Задание {{current}} / {{total}}',
     },
@@ -222,6 +296,25 @@ const translations: Record<Language, TranslationValue> = {
       progressAtModule: 'You stopped at the module {{module}}.',
       askCommand: 'Say Alan. Then say open module. Say back to go back. Say language to change the language.',
       openingModule: 'Opening the first module.',
+      enteredModule:
+        'You are in the module {{module}}. To hear which sections are available, say information.',
+      sectionListItem: '{{ordinal}} section) {{name}}',
+      openingSection: 'Opening the section {{section}}.',
+      unknownSection: 'There is no such section. To hear the list, say information.',
+      didNotUnderstandOnModule:
+        'I did not understand. Say Alan. Say information for the list of sections. Or say the section name or number.',
+      ordinal: {
+        '1': 'first',
+        '2': 'second',
+        '3': 'third',
+        '4': 'fourth',
+        '5': 'fifth',
+        '6': 'sixth',
+        '7': 'seventh',
+        '8': 'eighth',
+        '9': 'ninth',
+        '10': 'tenth',
+      },
       nowOnPage: 'You are now on the page {{page}}.',
       homePageName: 'Home',
       speaking: 'Speaking',
@@ -253,6 +346,14 @@ const translations: Record<Language, TranslationValue> = {
         title: 'Addition and subtraction',
         description: 'Simple problems with positive numbers',
       },
+      multiply: {
+        title: 'Multiplication',
+        description: 'Multiplying small numbers',
+      },
+      divide: {
+        title: 'Division',
+        description: 'Dividing with no remainder',
+      },
     },
     lessons: {
       additionBasics: {
@@ -267,10 +368,20 @@ const translations: Record<Language, TranslationValue> = {
         title: 'Mixed practice',
         description: 'Addition and subtraction together',
       },
+      multiplicationBasics: {
+        title: 'Multiplication basics',
+        description: 'Multiplying two numbers',
+      },
+      divisionBasics: {
+        title: 'Division basics',
+        description: 'Dividing with no remainder',
+      },
     },
     exercise: {
       questionAddition: '{{a}} + {{b}} = ?',
       questionSubtraction: '{{a}} − {{b}} = ?',
+      questionMultiplication: '{{a}} × {{b}} = ?',
+      questionDivision: '{{a}} ÷ {{b}} = ?',
       chooseAnswer: 'Choose an answer',
       exerciseProgress: 'Exercise {{current}} / {{total}}',
     },

@@ -34,6 +34,10 @@ export default function HomeScreen() {
     router.push(`/module/${firstModule.id}`);
   };
 
+  const openSection = (sectionId: string) => {
+    router.push(`/section/${sectionId}`);
+  };
+
   const goBack = () => {
     if (!router.canGoBack()) {
       return false;
@@ -45,6 +49,7 @@ export default function HomeScreen() {
   const voice = useVoiceAssistant({
     greeting,
     onOpenFirstModule: openFirstModule,
+    onOpenSection: openSection,
     onGoBack: goBack,
     enabled: isReady,
   });
@@ -75,7 +80,7 @@ export default function HomeScreen() {
               key={module.id}
               title={title}
               description={description}
-              badge={`1 ${t('common.section')}`}
+              badge={`${module.sectionIds.length} ${t('common.section')}`}
               accessibilityLabel={`${title}. ${description}`}
               accessibilityHint={t('common.openModule')}
               onPress={() => router.push(`/module/${module.id}`)}
