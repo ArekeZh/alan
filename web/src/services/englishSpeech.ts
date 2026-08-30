@@ -4,8 +4,10 @@ import type { RecordingAudio } from './audioSession';
 const GROQ_STT_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3-turbo';
 const COMMAND_HINT = 'Alan. Open module. Go back. Language.';
+const EXERCISE_ANSWER_HINT =
+  'One. Two. Three. Four. Five. Six. Seven. Eight. Nine. Ten. Eleven. Twelve. Numbers. Answer.';
 const LANGUAGE_HINT =
-  'Kazakh. Russian. English. Қазақша. Орысша. Ағылшынша. Казахский. Русский. Английский.';
+  'Kazakh. Kazak. Kazach. Kazakhstan. Russian. English. Қазақша. Орысша. Ағылшынша. Казахский. Русский. Английский.';
 
 export function usesEnglishVoice(language: Language) {
   return language === 'en';
@@ -26,7 +28,20 @@ type GroqTranscription = {
 
 type TranscribeOptions = {
   detectLanguage?: boolean;
+  forExerciseAnswer?: boolean;
 };
+
+function pickGroqPrompt(options?: TranscribeOptions) {
+  if (options?.detectLanguage) {
+    return LANGUAGE_HINT;
+  }
+
+  if (options?.forExerciseAnswer) {
+    return EXERCISE_ANSWER_HINT;
+  }
+
+  return COMMAND_HINT;
+}
 
 async function readGroqResponse(response: Response) {
   const payload = (await response.json()) as GroqTranscription;
@@ -52,7 +67,7 @@ export async function transcribeEnglish(
   if (!options?.detectLanguage) {
     form.append('language', 'en');
   }
-  form.append('prompt', options?.detectLanguage ? LANGUAGE_HINT : COMMAND_HINT);
+  form.append('prompt', pickGroqPrompt(options));
   form.append('response_format', 'json');
   form.append('temperature', '0');
 

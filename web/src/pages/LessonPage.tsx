@@ -1,32 +1,35 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { AccessibleButton } from '../components/AccessibleButton';
-import { AnswerGrid, AnswerOption } from '../components/AnswerOption';
+import { ExerciseIllustration } from '../components/ExerciseIllustration';
+import { LessonVideoPlayer, type LessonVideoPlayerHandle } from '../components/LessonVideoPlayer';
 import { ProgressBar } from '../components/ProgressBar';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { getCorrectAnswer, getLesson } from '../data/content';
+import { getCorrectAnswer, getLesson, lessonHasIntroVideo } from '../data/content';
+import { useContent } from '../hooks/ContentContext';
 import { useLessonProgress } from '../hooks/useLessonProgress';
 import { useVoiceAssistantState } from '../hooks/VoiceAssistantContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { playSuccessSound } from '../services/feedbackSound';
-import {
-  spokenAnswerOption,
-  spokenExerciseProgress,
-  spokenQuestion,
-} from '../utils/exerciseSpeech';
+import { spokenExerciseProgress, spokenQuestion } from '../utils/exerciseSpeech';
 
 export function LessonPage() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { isReady } = useContent();
   const { markLessonComplete } = useLessonProgress();
-  const { registerExerciseBridge, announceExercise, speakFeedback } = useVoiceAssistantState();
+  const { registerExerciseBridge, announceExercise, speakFeedback, status } = useVoiceAssistantState();
 
   const lesson = getLesson(id);
+  const introFinishedRef = useRef(false);
+  const videoPlayerRef = useRef<LessonVideoPlayerHandle>(null);
 
+  const [skippedIntro, setSkippedIntro] = useState(false);
+  const [userPausedVideo, setUserPausedVideo] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [spokenAnswer, setSpokenAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
@@ -44,7 +47,12 @@ export function LessonPage() {
       subtraction: 'exercise.questionSubtraction',
       multiplication: 'exercise.questionMultiplication',
       division: 'exercise.questionDivision',
+      counting: 'exercise.questionCounting',
     } as const;
+
+    if (exercise.type === 'counting') {
+      return t(questionKeyByType.counting);
+    }
 
     return t(questionKeyByType[exercise.type], { a: exercise.a, b: exercise.b });
   }, [exercise, t]);
@@ -69,8 +77,47 @@ export function LessonPage() {
     return spokenQuestion(exercise, t);
   }, [exercise, t]);
 
-  const chooseAnswerLabel = t('exercise.chooseAnswer');
+  const sayAnswerLabel = t('exercise.sayAnswer');
   const correctPraiseLabel = t('exercise.correctPraise');
+  const isWatchingIntro = lessonHasIntroVideo(lesson) && !skippedIntro;
+  const shouldPauseVideo =
+    userPausedVideo ||
+    status === 'listening' ||
+    status === 'thinking' ||
+    status === 'speaking' ||
+    status === 'error';
+
+  const startExercises = useCallback(async () => {
+    if (introFinishedRef.current || !lesson) {
+      return;
+    }
+
+    introFinishedRef.current = true;
+    setSkippedIntro(true);
+    await announceExercise(lesson.id, 0);
+  }, [announceExercise, lesson]);
+
+  const resetLessonState = useCallback(() => {
+    introFinishedRef.current = false;
+    setSkippedIntro(false);
+    setUserPausedVideo(false);
+    setCurrentIndex(0);
+    setSpokenAnswer(null);
+    setShowResult(false);
+    setCorrectCount(0);
+    setIsFinished(false);
+  }, []);
+
+  useEffect(() => {
+    introFinishedRef.current = false;
+    setSkippedIntro(false);
+    setUserPausedVideo(false);
+    setCurrentIndex(0);
+    setSpokenAnswer(null);
+    setShowResult(false);
+    setCorrectCount(0);
+    setIsFinished(false);
+  }, [id]);
 
   const finishCorrectAnswer = useCallback(
     async (newCorrectCount: number) => {
@@ -91,7 +138,7 @@ export function LessonPage() {
       }
 
       setCurrentIndex((index) => index + 1);
-      setSelectedAnswer(null);
+      setSpokenAnswer(null);
       setShowResult(false);
     },
     [
@@ -110,7 +157,7 @@ export function LessonPage() {
       }
 
       const isCorrect = value === correctAnswer;
-      setSelectedAnswer(value);
+      setSpokenAnswer(value);
       setShowResult(true);
 
       if (!isCorrect) {
@@ -133,13 +180,11 @@ export function LessonPage() {
       return;
     }
 
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setShowResult(false);
-    setCorrectCount(0);
-    setIsFinished(false);
-    void announceExercise(lesson.id, 0);
-  }, [announceExercise, lesson]);
+    resetLessonState();
+    if (!lessonHasIntroVideo(lesson)) {
+      void announceExercise(lesson.id, 0);
+    }
+  }, [announceExercise, lesson, resetLessonState]);
 
   useLayoutEffect(() => {
     if (!lesson) {
@@ -151,7 +196,6 @@ export function LessonPage() {
       registerExerciseBridge({
         lessonId: lesson.id,
         exerciseIndex: 0,
-        options: [],
         correctAnswer: 0,
         showResult: false,
         isFinished: true,
@@ -168,6 +212,31 @@ export function LessonPage() {
       return () => registerExerciseBridge(null);
     }
 
+    if (isWatchingIntro) {
+      registerExerciseBridge({
+        lessonId: lesson.id,
+        exerciseIndex: 0,
+        correctAnswer: 0,
+        showResult: false,
+        isFinished: false,
+        isWatchingIntro: true,
+        skipIntro: startExercises,
+        pauseIntro: () => {
+          setUserPausedVideo(true);
+        },
+        resumeIntro: () => {
+          setUserPausedVideo(false);
+        },
+        seekIntroBy: (seconds) => {
+          videoPlayerRef.current?.seekBy(seconds);
+        },
+        selectAnswer: async () => {},
+        repeatExercise: async () => {},
+      });
+
+      return () => registerExerciseBridge(null);
+    }
+
     if (!exercise) {
       registerExerciseBridge(null);
       return;
@@ -176,7 +245,6 @@ export function LessonPage() {
     registerExerciseBridge({
       lessonId: lesson.id,
       exerciseIndex: currentIndex,
-      options: exercise.options,
       correctAnswer,
       showResult,
       isFinished,
@@ -195,9 +263,11 @@ export function LessonPage() {
     handleFinish,
     handleRetry,
     isFinished,
+    isWatchingIntro,
     lesson,
     registerExerciseBridge,
     showResult,
+    startExercises,
     submitAnswer,
   ]);
 
@@ -210,18 +280,18 @@ export function LessonPage() {
   }, [isFinished, lesson, speakFeedback, t]);
 
   useEffect(() => {
-    if (!lesson || isFinished || currentIndex === 0) {
+    if (!lesson || isFinished || isWatchingIntro || currentIndex === 0) {
       return;
     }
 
     void announceExercise(lesson.id, currentIndex);
-  }, [announceExercise, currentIndex, isFinished, lesson]);
+  }, [announceExercise, currentIndex, isFinished, isWatchingIntro, lesson]);
 
-  if (!lesson) {
+  if (!isReady || !lesson) {
     return null;
   }
 
-  const lessonTitle = t(`${lesson.translationKey}.title`);
+  const lessonTitle = lesson.title;
   const totalExercises = lesson.exercises.length;
 
   if (isFinished) {
@@ -246,6 +316,54 @@ export function LessonPage() {
     );
   }
 
+  if (isWatchingIntro && lesson.videoUrl) {
+    const skipHint = t('voice.skipVideoHint');
+
+    return (
+      <main className="screen">
+        <ScreenHeader showBack title={lessonTitle} />
+
+        <LessonVideoPlayer
+          ref={videoPlayerRef}
+          url={lesson.videoUrl}
+          paused={shouldPauseVideo}
+          title={lessonTitle}
+          playLabel={t('common.playVideo')}
+          rewindLabel={t('common.rewindVideo')}
+          forwardLabel={t('common.forwardVideo')}
+          onEnded={() => {
+            void startExercises();
+          }}
+        />
+
+        <div className="lesson-video-controls">
+          <AccessibleButton
+            label={t('common.stopVideo')}
+            onPress={() => setUserPausedVideo(true)}
+            variant={userPausedVideo ? 'secondary' : 'primary'}
+          />
+          <AccessibleButton
+            label={t('common.continue')}
+            onPress={() => setUserPausedVideo(false)}
+            variant={userPausedVideo ? 'primary' : 'secondary'}
+          />
+        </div>
+
+        <p className="lesson-video-hint" data-hover-speak aria-label={skipHint}>
+          {skipHint}
+        </p>
+
+        <AccessibleButton
+          label={t('common.skipToExercises')}
+          onPress={() => {
+            void startExercises();
+          }}
+          variant="secondary"
+        />
+      </main>
+    );
+  }
+
   if (!exercise) {
     return null;
   }
@@ -266,12 +384,12 @@ export function LessonPage() {
     }
 
     setCurrentIndex((index) => index + 1);
-    setSelectedAnswer(null);
+    setSpokenAnswer(null);
     setShowResult(false);
   };
 
   const feedbackText =
-    showResult && selectedAnswer === correctAnswer
+    showResult && spokenAnswer === correctAnswer
       ? correctPraiseLabel
       : showResult
         ? `${t('common.wrong')} ${correctAnswer}`
@@ -289,28 +407,14 @@ export function LessonPage() {
       />
 
       <section className="question-card">
-        <p className="section-label" data-hover-speak aria-label={chooseAnswerLabel}>
-          {chooseAnswerLabel}
+        <p className="section-label" data-hover-speak aria-label={sayAnswerLabel}>
+          {sayAnswerLabel}
         </p>
+        <ExerciseIllustration code={exercise.code} label={spokenQuestionText} />
         <p className="question" data-hover-speak aria-label={spokenQuestionText}>
           {questionText}
         </p>
       </section>
-
-      <AnswerGrid>
-        {exercise.options.map((option) => (
-          <AnswerOption
-            key={option}
-            value={option}
-            spokenLabel={spokenAnswerOption(option, t)}
-            selected={selectedAnswer === option}
-            showResult={showResult}
-            isCorrect={option === correctAnswer}
-            disabled={showResult}
-            onPress={() => void submitAnswer(option)}
-          />
-        ))}
-      </AnswerGrid>
 
       {feedbackText ? (
         <p className="feedback" aria-live="polite">
@@ -318,7 +422,7 @@ export function LessonPage() {
         </p>
       ) : null}
 
-      {showResult && selectedAnswer !== correctAnswer ? (
+      {showResult && spokenAnswer !== correctAnswer ? (
         <AccessibleButton
           label={
             currentIndex === totalExercises - 1 ? t('common.finish') : t('common.continue')

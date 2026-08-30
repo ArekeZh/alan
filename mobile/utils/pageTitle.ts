@@ -30,7 +30,7 @@ export function getPageTitleAfterGoingBack(pathname: string, t: Translate) {
     const lesson = getLesson(lessonId);
     const section = lesson ? getSection(lesson.sectionId) : undefined;
     if (section) {
-      return t(`${section.translationKey}.title`);
+      return section.title;
     }
   }
 
@@ -39,7 +39,7 @@ export function getPageTitleAfterGoingBack(pathname: string, t: Translate) {
     const section = getSection(sectionId);
     const module = section ? getModule(section.moduleId) : undefined;
     if (module) {
-      return t(`${module.translationKey}.title`);
+      return module.title;
     }
   }
 

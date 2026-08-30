@@ -29,36 +29,24 @@ export default function ModuleScreen() {
     return null;
   }
 
-  const moduleTitle = t(`${module.translationKey}.title`);
-  const moduleDescription = t(module.descriptionKey);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenHeader
-          showBack
-          title={moduleTitle}
-          subtitle={moduleDescription}
-        />
+        <ScreenHeader showBack title={module.title} subtitle={module.description} />
 
         <Text style={styles.sectionTitle}>{t('common.section')}</Text>
 
-        {moduleSections.map((section, index) => {
-          const title = t(`${section.translationKey}.title`);
-          const description = t(section.descriptionKey);
-
-          return (
-            <CardButton
-              key={section.id}
-              title={`${index + 1}. ${title}`}
-              description={description}
-              badge={`${section.lessonIds.length} ${t('common.lesson')}`}
-              accessibilityLabel={`${t('common.section')} ${index + 1}. ${title}. ${description}`}
-              accessibilityHint={t('common.openSection')}
-              onPress={() => router.push(`/section/${section.id}`)}
-            />
-          );
-        })}
+        {moduleSections.map((section, index) => (
+          <CardButton
+            key={section.id}
+            title={`${index + 1}. ${section.title}`}
+            description={section.description}
+            badge={`${section.lessonIds.length} ${t('common.lesson')}`}
+            accessibilityLabel={`${t('common.section')} ${index + 1}. ${section.title}. ${section.description}`}
+            accessibilityHint={t('common.openSection')}
+            onPress={() => router.push(`/section/${section.id}`)}
+          />
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

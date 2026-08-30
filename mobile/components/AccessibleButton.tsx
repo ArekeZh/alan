@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
 
 import { colors, touchTarget, typography } from '../constants/theme';
+import { interruptSpeechForNavigation } from '../utils/navigationSpeech';
 
 type AccessibleButtonProps = {
   label: string;
@@ -29,7 +30,10 @@ export function AccessibleButton({
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      onPress={onPress}
+      onPress={() => {
+        void interruptSpeechForNavigation();
+        onPress();
+      }}
       style={({ pressed }) => [
         styles.base,
         isPrimary && styles.primary,

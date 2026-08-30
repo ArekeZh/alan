@@ -2,6 +2,8 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 
 import { ListeningMicBadge } from './components/ListeningMicBadge';
 import { StartOverlay } from './components/StartOverlay';
+import { AuthProvider, ProgressSyncProvider } from './hooks/AuthContext';
+import { ContentProvider } from './hooks/ContentContext';
 import { VoiceAssistantProvider } from './hooks/VoiceAssistantContext';
 import { useHoverSpeech } from './hooks/useHoverSpeech';
 import { ProgressProvider } from './hooks/useLessonProgress';
@@ -39,11 +41,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <LanguageProvider>
-        <ProgressProvider>
-          <VoiceListeningProvider>
-            <AppShell />
-          </VoiceListeningProvider>
-        </ProgressProvider>
+        <AuthProvider>
+          <ProgressSyncProvider>
+            <ContentProvider>
+              <ProgressProvider>
+                <VoiceListeningProvider>
+                  <AppShell />
+                </VoiceListeningProvider>
+              </ProgressProvider>
+            </ContentProvider>
+          </ProgressSyncProvider>
+        </AuthProvider>
       </LanguageProvider>
     </BrowserRouter>
   );

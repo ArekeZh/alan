@@ -125,7 +125,15 @@ function isWav(bytes: ArrayBuffer) {
 export async function playAudioBytes(bytes: ArrayBuffer) {
   stopSpeaking();
   await stopPlayback();
+  await playBytesInternal(bytes);
+}
 
+export async function playHoverAudioBytes(bytes: ArrayBuffer) {
+  await stopPlayback();
+  await playBytesInternal(bytes);
+}
+
+async function playBytesInternal(bytes: ArrayBuffer) {
   const context = getAudioContext();
   if (context.state === 'suspended') {
     await context.resume();

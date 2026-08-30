@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { CardButton } from '../components/CardButton';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getLessonsForSection, getSection } from '../data/content';
+import { useContent } from '../hooks/ContentContext';
 import { useLessonProgress } from '../hooks/useLessonProgress';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -10,27 +11,23 @@ export function SectionPage() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { isReady } = useContent();
   const { getLessonStatus } = useLessonProgress();
 
   const section = getSection(id);
   const sectionLessons = getLessonsForSection(id);
 
-  if (!section) {
+  if (!isReady || !section) {
     return null;
   }
 
-  const sectionTitle = t(`${section.translationKey}.title`);
-  const sectionDescription = t(section.descriptionKey);
-
   return (
     <main className="screen">
-      <ScreenHeader showBack title={sectionTitle} subtitle={sectionDescription} />
+      <ScreenHeader showBack title={section.title} subtitle={section.description} />
 
       <p className="section-label">{t('common.lesson')}</p>
 
       {sectionLessons.map((lesson, index) => {
-        const title = t(`${lesson.translationKey}.title`);
-        const description = t(lesson.descriptionKey);
         const status = getLessonStatus(lesson.id);
 
         const badge = status?.completed
@@ -42,10 +39,10 @@ export function SectionPage() {
         return (
           <CardButton
             key={lesson.id}
-            title={`${index + 1}. ${title}`}
-            description={description}
+            title={`${index + 1}. ${lesson.title}`}
+            description={lesson.description}
             badge={badge}
-            accessibilityLabel={`${t('common.lesson')} ${index + 1}. ${title}. ${description}. ${badge}`}
+            accessibilityLabel={`${t('common.lesson')} ${index + 1}. ${lesson.title}. ${lesson.description}. ${badge}`}
             accessibilityHint={t('common.openLesson')}
             onPress={() => void navigate(`/lesson/${lesson.id}`)}
           />

@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing, touchTarget, typography } from '../constants/theme';
+import { interruptSpeechForNavigation } from '../utils/navigationSpeech';
 
 type CardButtonProps = {
   title: string;
@@ -24,7 +25,10 @@ export function CardButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
-      onPress={onPress}
+      onPress={() => {
+        void interruptSpeechForNavigation();
+        onPress();
+      }}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.content}>

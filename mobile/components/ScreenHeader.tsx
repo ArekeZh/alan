@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 
 import { colors, spacing, typography } from '../constants/theme';
 import { useLanguage } from '../i18n/LanguageContext';
+import { interruptSpeechForNavigation } from '../utils/navigationSpeech';
 
 type ScreenHeaderProps = {
   title: string;
@@ -20,7 +21,10 @@ export function ScreenHeader({ title, subtitle, showBack = false }: ScreenHeader
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
-          onPress={() => router.back()}
+          onPress={() => {
+            void interruptSpeechForNavigation();
+            router.back();
+          }}
           style={styles.backButton}
         >
           <Text style={styles.backText}>← {t('common.back')}</Text>

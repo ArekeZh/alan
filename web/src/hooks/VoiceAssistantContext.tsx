@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { getModule, modules } from '../data/content';
+import { useContent } from './ContentContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { requestMicPermission } from '../services/audioSession';
 import { unlockAudio } from '../services/feedbackSound';
@@ -36,12 +37,13 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
+  const { isReady: contentReady } = useContent();
   const { isReady, lastOpenedModuleId } = useLessonProgress();
 
   const firstModule = modules[0];
   const lastModule = lastOpenedModuleId ? getModule(lastOpenedModuleId) : undefined;
   const progressModule = lastModule ?? firstModule;
-  const progressModuleTitle = t(`${progressModule.translationKey}.title`);
+  const progressModuleTitle = progressModule?.title ?? '';
 
   const greeting = useMemo(() => {
     const progressLine = lastModule
@@ -52,8 +54,11 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   }, [lastModule, progressModuleTitle, t]);
 
   const onOpenFirstModule = useCallback(() => {
+    if (!firstModule) {
+      return;
+    }
     navigate(`/module/${firstModule.id}`);
-  }, [firstModule.id, navigate]);
+  }, [firstModule, navigate]);
 
   const onOpenSection = useCallback(
     (sectionId: string) => {
@@ -89,7 +94,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
     onOpenSection,
     onOpenLesson,
     onGoBack,
-    enabled: isReady && audioUnlocked,
+    enabled: isReady && audioUnlocked && contentReady,
   });
 
   const value = useMemo(

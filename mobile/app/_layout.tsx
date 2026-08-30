@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ListeningMicBadge } from '../components/ListeningMicBadge';
 import { TalkBar } from '../components/TalkBar';
 import { colors } from '../constants/theme';
+import { AuthProvider, ProgressSyncProvider } from '../hooks/AuthContext';
+import { ContentProvider } from '../hooks/ContentContext';
 import { VoiceAssistantProvider } from '../hooks/VoiceAssistantContext';
 import { ProgressProvider } from '../hooks/useLessonProgress';
 import { VoiceListeningProvider } from '../hooks/useVoiceListening';
@@ -46,11 +48,17 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <LanguageProvider>
-        <ProgressProvider>
-          <VoiceListeningProvider>
-            <RootNavigator />
-          </VoiceListeningProvider>
-        </ProgressProvider>
+        <AuthProvider>
+          <ProgressSyncProvider>
+            <ContentProvider>
+              <ProgressProvider>
+                <VoiceListeningProvider>
+                  <RootNavigator />
+                </VoiceListeningProvider>
+              </ProgressProvider>
+            </ContentProvider>
+          </ProgressSyncProvider>
+        </AuthProvider>
       </LanguageProvider>
     </SafeAreaProvider>
   );

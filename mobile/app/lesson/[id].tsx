@@ -1,34 +1,37 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AccessibleButton } from '../../components/AccessibleButton';
-import { AnswerGrid, AnswerOption } from '../../components/AnswerOption';
+import { ExerciseIllustration } from '../../components/ExerciseIllustration';
+import { LessonVideoPlayer, type LessonVideoPlayerHandle } from '../../components/LessonVideoPlayer';
 import { ProgressBar } from '../../components/ProgressBar';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { colors, spacing, typography } from '../../constants/theme';
-import { getCorrectAnswer, getLesson } from '../../data/content';
+import { getCorrectAnswer, getLesson, lessonHasIntroVideo } from '../../data/content';
+import { useContent } from '../../hooks/ContentContext';
 import { useVoiceAssistantState } from '../../hooks/VoiceAssistantContext';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useLessonProgress } from '../../hooks/useLessonProgress';
-import {
-  spokenAnswerOption,
-  spokenExerciseProgress,
-  spokenQuestion,
-} from '../../utils/exerciseSpeech';
+import { spokenExerciseProgress, spokenQuestion } from '../../utils/exerciseSpeech';
 
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useLanguage();
+  const { isReady } = useContent();
   const { markLessonComplete } = useLessonProgress();
-  const { registerExerciseBridge, announceExercise, speakFeedback } = useVoiceAssistantState();
+  const { registerExerciseBridge, announceExercise, speakFeedback, status } = useVoiceAssistantState();
 
   const lesson = getLesson(id);
+  const introFinishedRef = useRef(false);
+  const videoPlayerRef = useRef<LessonVideoPlayerHandle>(null);
 
+  const [skippedIntro, setSkippedIntro] = useState(false);
+  const [userPausedVideo, setUserPausedVideo] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [spokenAnswer, setSpokenAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
@@ -46,7 +49,12 @@ export default function LessonScreen() {
       subtraction: 'exercise.questionSubtraction',
       multiplication: 'exercise.questionMultiplication',
       division: 'exercise.questionDivision',
+      counting: 'exercise.questionCounting',
     } as const;
+
+    if (exercise.type === 'counting') {
+      return t(questionKeyByType.counting);
+    }
 
     return t(questionKeyByType[exercise.type], { a: exercise.a, b: exercise.b });
   }, [exercise, t]);
@@ -71,8 +79,47 @@ export default function LessonScreen() {
     return spokenQuestion(exercise, t);
   }, [exercise, t]);
 
-  const chooseAnswerLabel = t('exercise.chooseAnswer');
+  const sayAnswerLabel = t('exercise.sayAnswer');
   const correctPraiseLabel = t('exercise.correctPraise');
+  const isWatchingIntro = lessonHasIntroVideo(lesson) && !skippedIntro;
+  const shouldPauseVideo =
+    userPausedVideo ||
+    status === 'listening' ||
+    status === 'thinking' ||
+    status === 'speaking' ||
+    status === 'error';
+
+  const startExercises = useCallback(async () => {
+    if (introFinishedRef.current || !lesson) {
+      return;
+    }
+
+    introFinishedRef.current = true;
+    setSkippedIntro(true);
+    await announceExercise(lesson.id, 0);
+  }, [announceExercise, lesson]);
+
+  const resetLessonState = useCallback(() => {
+    introFinishedRef.current = false;
+    setSkippedIntro(false);
+    setUserPausedVideo(false);
+    setCurrentIndex(0);
+    setSpokenAnswer(null);
+    setShowResult(false);
+    setCorrectCount(0);
+    setIsFinished(false);
+  }, []);
+
+  useEffect(() => {
+    introFinishedRef.current = false;
+    setSkippedIntro(false);
+    setUserPausedVideo(false);
+    setCurrentIndex(0);
+    setSpokenAnswer(null);
+    setShowResult(false);
+    setCorrectCount(0);
+    setIsFinished(false);
+  }, [id]);
 
   const finishCorrectAnswer = useCallback(
     async (newCorrectCount: number) => {
@@ -92,7 +139,7 @@ export default function LessonScreen() {
       }
 
       setCurrentIndex((index) => index + 1);
-      setSelectedAnswer(null);
+      setSpokenAnswer(null);
       setShowResult(false);
     },
     [correctPraiseLabel, currentIndex, lesson, markLessonComplete, speakFeedback],
@@ -105,7 +152,7 @@ export default function LessonScreen() {
       }
 
       const isCorrect = value === correctAnswer;
-      setSelectedAnswer(value);
+      setSpokenAnswer(value);
       setShowResult(true);
 
       if (!isCorrect) {
@@ -128,13 +175,11 @@ export default function LessonScreen() {
       return;
     }
 
-    setCurrentIndex(0);
-    setSelectedAnswer(null);
-    setShowResult(false);
-    setCorrectCount(0);
-    setIsFinished(false);
-    void announceExercise(lesson.id, 0);
-  }, [announceExercise, lesson]);
+    resetLessonState();
+    if (!lessonHasIntroVideo(lesson)) {
+      void announceExercise(lesson.id, 0);
+    }
+  }, [announceExercise, lesson, resetLessonState]);
 
   useLayoutEffect(() => {
     if (!lesson) {
@@ -146,7 +191,6 @@ export default function LessonScreen() {
       registerExerciseBridge({
         lessonId: lesson.id,
         exerciseIndex: 0,
-        options: [],
         correctAnswer: 0,
         showResult: false,
         isFinished: true,
@@ -163,6 +207,31 @@ export default function LessonScreen() {
       return () => registerExerciseBridge(null);
     }
 
+    if (isWatchingIntro) {
+      registerExerciseBridge({
+        lessonId: lesson.id,
+        exerciseIndex: 0,
+        correctAnswer: 0,
+        showResult: false,
+        isFinished: false,
+        isWatchingIntro: true,
+        skipIntro: startExercises,
+        pauseIntro: () => {
+          setUserPausedVideo(true);
+        },
+        resumeIntro: () => {
+          setUserPausedVideo(false);
+        },
+        seekIntroBy: (seconds) => {
+          videoPlayerRef.current?.seekBy(seconds);
+        },
+        selectAnswer: async () => {},
+        repeatExercise: async () => {},
+      });
+
+      return () => registerExerciseBridge(null);
+    }
+
     if (!exercise) {
       registerExerciseBridge(null);
       return;
@@ -171,7 +240,6 @@ export default function LessonScreen() {
     registerExerciseBridge({
       lessonId: lesson.id,
       exerciseIndex: currentIndex,
-      options: exercise.options,
       correctAnswer,
       showResult,
       isFinished,
@@ -190,9 +258,11 @@ export default function LessonScreen() {
     handleFinish,
     handleRetry,
     isFinished,
+    isWatchingIntro,
     lesson,
     registerExerciseBridge,
     showResult,
+    startExercises,
     submitAnswer,
   ]);
 
@@ -205,18 +275,18 @@ export default function LessonScreen() {
   }, [isFinished, lesson, speakFeedback, t]);
 
   useEffect(() => {
-    if (!lesson || isFinished || currentIndex === 0) {
+    if (!lesson || isFinished || isWatchingIntro || currentIndex === 0) {
       return;
     }
 
     void announceExercise(lesson.id, currentIndex);
-  }, [announceExercise, currentIndex, isFinished, lesson]);
+  }, [announceExercise, currentIndex, isFinished, isWatchingIntro, lesson]);
 
-  if (!lesson) {
+  if (!isReady || !lesson) {
     return null;
   }
 
-  const lessonTitle = t(`${lesson.translationKey}.title`);
+  const lessonTitle = lesson.title;
   const totalExercises = lesson.exercises.length;
 
   if (isFinished) {
@@ -250,6 +320,58 @@ export default function LessonScreen() {
     );
   }
 
+  if (isWatchingIntro && lesson.videoUrl) {
+    const skipHint = t('voice.skipVideoHint');
+
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <ScreenHeader showBack title={lessonTitle} />
+
+          <LessonVideoPlayer
+            ref={videoPlayerRef}
+            url={lesson.videoUrl}
+            paused={shouldPauseVideo}
+            title={lessonTitle}
+            rewindLabel={t('common.rewindVideo')}
+            forwardLabel={t('common.forwardVideo')}
+            onEnded={() => {
+              void startExercises();
+            }}
+          />
+
+          <View style={styles.playbackRow}>
+            <AccessibleButton
+              label={t('common.stopVideo')}
+              onPress={() => setUserPausedVideo(true)}
+              variant={userPausedVideo ? 'secondary' : 'primary'}
+              style={styles.playbackButton}
+            />
+            <AccessibleButton
+              label={t('common.continue')}
+              onPress={() => setUserPausedVideo(false)}
+              variant={userPausedVideo ? 'primary' : 'secondary'}
+              style={styles.playbackButton}
+            />
+          </View>
+
+          <Text accessibilityRole="text" accessibilityLabel={skipHint} style={styles.videoHint}>
+            {skipHint}
+          </Text>
+
+          <AccessibleButton
+            label={t('common.skipToExercises')}
+            onPress={() => {
+              void startExercises();
+            }}
+            variant="secondary"
+            style={styles.actionButton}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (!exercise) {
     return null;
   }
@@ -269,12 +391,12 @@ export default function LessonScreen() {
     }
 
     setCurrentIndex((index) => index + 1);
-    setSelectedAnswer(null);
+    setSpokenAnswer(null);
     setShowResult(false);
   };
 
   const feedbackText =
-    showResult && selectedAnswer === correctAnswer
+    showResult && spokenAnswer === correctAnswer
       ? correctPraiseLabel
       : showResult
         ? `${t('common.wrong')} ${correctAnswer}`
@@ -293,9 +415,10 @@ export default function LessonScreen() {
         />
 
         <View style={styles.questionCard}>
-          <Text accessibilityRole="text" accessibilityLabel={chooseAnswerLabel} style={styles.questionLabel}>
-            {chooseAnswerLabel}
+          <Text accessibilityRole="text" accessibilityLabel={sayAnswerLabel} style={styles.questionLabel}>
+            {sayAnswerLabel}
           </Text>
+          <ExerciseIllustration code={exercise.code} label={spokenQuestionText} />
           <Text
             accessibilityRole="text"
             accessibilityLabel={spokenQuestionText}
@@ -305,34 +428,19 @@ export default function LessonScreen() {
           </Text>
         </View>
 
-        <AnswerGrid>
-          {exercise.options.map((option) => (
-            <AnswerOption
-              key={option}
-              value={option}
-              spokenLabel={spokenAnswerOption(option, t)}
-              selected={selectedAnswer === option}
-              showResult={showResult}
-              isCorrect={option === correctAnswer}
-              disabled={showResult}
-              onPress={() => void submitAnswer(option)}
-            />
-          ))}
-        </AnswerGrid>
-
         {feedbackText ? (
           <Text
             accessibilityLiveRegion="polite"
             style={[
               styles.feedback,
-              selectedAnswer === correctAnswer ? styles.feedbackSuccess : styles.feedbackError,
+              spokenAnswer === correctAnswer ? styles.feedbackSuccess : styles.feedbackError,
             ]}
           >
             {feedbackText}
           </Text>
         ) : null}
 
-        {showResult && selectedAnswer !== correctAnswer ? (
+        {showResult && spokenAnswer !== correctAnswer ? (
           <AccessibleButton
             label={
               currentIndex === totalExercises - 1
@@ -361,6 +469,41 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
   },
+  resultCard: {
+    backgroundColor: colors.successBg,
+    borderRadius: 16,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  resultTitle: {
+    fontSize: typography.heading,
+    fontWeight: '800',
+    color: colors.success,
+  },
+  resultScore: {
+    fontSize: typography.body,
+    color: colors.text,
+  },
+  actionButton: {
+    marginTop: spacing.sm,
+  },
+  playbackRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: spacing.md,
+  },
+  playbackButton: {
+    flex: 1,
+    minHeight: 72,
+    marginTop: 0,
+  },
+  videoHint: {
+    fontSize: typography.body,
+    color: colors.text,
+    lineHeight: 26,
+    marginBottom: spacing.md,
+  },
   questionCard: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -368,23 +511,24 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.lg,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   questionLabel: {
     fontSize: typography.caption,
+    fontWeight: '700',
     color: colors.textSecondary,
-    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   question: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '800',
     color: colors.text,
-    letterSpacing: 1,
+    lineHeight: 42,
   },
   feedback: {
-    marginTop: spacing.md,
     fontSize: typography.body,
     fontWeight: '700',
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
   feedbackSuccess: {
@@ -392,31 +536,5 @@ const styles = StyleSheet.create({
   },
   feedbackError: {
     color: colors.error,
-  },
-  actionButton: {
-    marginTop: spacing.lg,
-  },
-  resultCard: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: colors.success,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  resultTitle: {
-    fontSize: typography.title,
-    fontWeight: '800',
-    color: colors.success,
-    textAlign: 'center',
-  },
-  resultScore: {
-    fontSize: typography.heading,
-    color: colors.text,
-    textAlign: 'center',
   },
 });

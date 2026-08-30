@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { LessonProgress } from '../types';
+import { useAuth, useProgressSync } from './AuthContext';
 
 const STORAGE_KEY = 'lesson_progress';
 const LAST_MODULE_KEY = 'last_opened_module';
@@ -25,7 +26,9 @@ type ProgressContextValue = {
 const ProgressContext = createContext<ProgressContextValue | null>(null);
 
 export function ProgressProvider({ children }: { children: ReactNode }) {
-  const [progress, setProgress] = useState<LessonProgress>({});
+  const { user, preferences, updateUserPreferences } = useAuth();
+  const { progress: remoteProgress, syncProgress } = useProgressSync();
+  const [localProgress, setLocalProgress] = useState<LessonProgress>({});
   const [lastOpenedModuleId, setLastOpenedModuleId] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -36,7 +39,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     ])
       .then(([storedProgress, storedModule]) => {
         if (storedProgress) {
-          setProgress(JSON.parse(storedProgress) as LessonProgress);
+          setLocalProgress(JSON.parse(storedProgress) as LessonProgress);
         }
         if (storedModule) {
           setLastOpenedModuleId(storedModule);
@@ -45,18 +48,34 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsReady(true));
   }, []);
 
+  useEffect(() => {
+    if (preferences?.last_opened_module_id) {
+      setLastOpenedModuleId(preferences.last_opened_module_id);
+    }
+  }, [preferences?.last_opened_module_id]);
+
+  const progress = user ? remoteProgress : localProgress;
+
   const markLessonComplete = useCallback(
     async (lessonId: string, score: number, total: number) => {
-      setProgress((current) => {
+      const completed = score === total;
+      const entry = { completed, score };
+
+      if (user) {
+        await syncProgress(lessonId, completed, score);
+        return;
+      }
+
+      setLocalProgress((current) => {
         const nextProgress = {
           ...current,
-          [lessonId]: { completed: score === total, score },
+          [lessonId]: entry,
         };
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextProgress));
+        void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextProgress));
         return nextProgress;
       });
     },
-    [],
+    [syncProgress, user],
   );
 
   const getLessonStatus = useCallback(
@@ -64,10 +83,17 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     [progress],
   );
 
-  const setLastOpenedModule = useCallback(async (moduleId: string) => {
-    setLastOpenedModuleId(moduleId);
-    await AsyncStorage.setItem(LAST_MODULE_KEY, moduleId);
-  }, []);
+  const setLastOpenedModule = useCallback(
+    async (moduleId: string) => {
+      setLastOpenedModuleId(moduleId);
+      await AsyncStorage.setItem(LAST_MODULE_KEY, moduleId);
+
+      if (user) {
+        await updateUserPreferences({ last_opened_module_id: moduleId });
+      }
+    },
+    [updateUserPreferences, user],
+  );
 
   const value = useMemo(
     () => ({

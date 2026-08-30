@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router';
 
 import { useLanguage } from '../i18n/LanguageContext';
+import { interruptSpeechForNavigation } from '../utils/navigationSpeech';
 
 type ScreenHeaderProps = {
   title: string;
@@ -19,7 +20,10 @@ export function ScreenHeader({ title, subtitle, showBack = false }: ScreenHeader
           type="button"
           className="back-button"
           aria-label={t('common.back')}
-          onClick={() => void navigate(-1)}
+          onClick={() => {
+            interruptSpeechForNavigation();
+            void navigate(-1);
+          }}
         >
           ← {t('common.back')}
         </button>

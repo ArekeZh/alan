@@ -128,6 +128,101 @@ a:focus-visible {
   margin-bottom: var(--space-md);
 }
 
+.exercise-illustration {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: var(--space-sm) 0;
+  min-height: 7rem;
+}
+
+.exercise-illustration svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 5.5rem;
+}
+
+.lesson-video-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: var(--space-md);
+}
+
+.lesson-seek-button {
+  flex: 0 0 92px;
+  min-width: 92px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.lesson-video {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.lesson-video-host,
+.lesson-video-host > div,
+.lesson-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.lesson-video-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lesson-video-play {
+  min-height: var(--touch);
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: var(--body);
+  font-weight: 800;
+}
+
+.lesson-video-hint {
+  margin: 0 0 var(--space-md);
+  font-size: var(--body);
+  line-height: 1.45;
+}
+
+.lesson-video-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: var(--space-md);
+}
+
+.lesson-video-controls .btn {
+  width: auto;
+  flex: 1;
+  min-height: 72px;
+  font-size: 22px;
+  font-weight: 800;
+}
+
 .voice-status {
   margin: 0;
   font-size: var(--heading);
@@ -433,10 +528,81 @@ a:focus-visible {
     font-size: 30px;
   }
 
+  .lesson-seek-button {
+    flex-basis: 72px;
+    min-width: 72px;
+    font-size: 22px;
+  }
+
   .card-button {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.account-label {
+  font-size: var(--caption);
+  color: var(--text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.account-nickname {
+  font-size: var(--heading);
+  font-weight: 700;
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--body);
+}
+
+.account-field input {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: var(--body);
+}
+
+.account-button {
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-button.secondary {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.account-error {
+  color: var(--danger, #c0392b);
+  font-size: var(--caption);
 }
 
 @media (min-width: 768px) {

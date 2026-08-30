@@ -22,23 +22,14 @@ export default function SectionScreen() {
     return null;
   }
 
-  const sectionTitle = t(`${section.translationKey}.title`);
-  const sectionDescription = t(section.descriptionKey);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ScreenHeader
-          showBack
-          title={sectionTitle}
-          subtitle={sectionDescription}
-        />
+        <ScreenHeader showBack title={section.title} subtitle={section.description} />
 
         <Text style={styles.sectionTitle}>{t('common.lesson')}</Text>
 
         {sectionLessons.map((lesson, index) => {
-          const title = t(`${lesson.translationKey}.title`);
-          const description = t(lesson.descriptionKey);
           const status = getLessonStatus(lesson.id);
 
           const badge = status?.completed
@@ -50,10 +41,10 @@ export default function SectionScreen() {
           return (
             <CardButton
               key={lesson.id}
-              title={`${index + 1}. ${title}`}
-              description={description}
+              title={`${index + 1}. ${lesson.title}`}
+              description={lesson.description}
               badge={badge}
-              accessibilityLabel={`${t('common.lesson')} ${index + 1}. ${title}. ${description}. ${badge}`}
+              accessibilityLabel={`${t('common.lesson')} ${index + 1}. ${lesson.title}. ${lesson.description}. ${badge}`}
               accessibilityHint={t('common.openLesson')}
               onPress={() => router.push(`/lesson/${lesson.id}`)}
             />

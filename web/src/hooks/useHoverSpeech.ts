@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 
 import { useLanguage } from '../i18n/LanguageContext';
 import { cancelRecording, stopBrowserRecognition } from '../services/audioSession';
-import { speakHover, stopHoverSpeech } from '../utils/speech';
+import { unlockAudio } from '../services/feedbackSound';
+import { isMainSpeechActive, speakHover, stopHoverSpeech } from '../utils/speech';
 import { useVoiceAssistantState } from './VoiceAssistantContext';
 
 const HOVER_DELAY_MS = 320;
@@ -19,24 +20,12 @@ function getSpeakableLabel(element: HTMLElement) {
   return ariaLabel || visibleText;
 }
 
-function isAssistantBusy(status: string) {
-  return status === 'speaking' || status === 'listening' || status === 'thinking';
-}
-
 export function useHoverSpeech() {
   const { language } = useLanguage();
-  const { status, audioUnlocked } = useVoiceAssistantState();
+  const { audioUnlocked } = useVoiceAssistantState();
   const languageRef = useRef(language);
-  const statusRef = useRef(status);
 
   languageRef.current = language;
-  statusRef.current = status;
-
-  useEffect(() => {
-    if (isAssistantBusy(status)) {
-      stopHoverSpeech();
-    }
-  }, [status]);
 
   useEffect(() => {
     if (!audioUnlocked) {
@@ -72,18 +61,21 @@ export function useHoverSpeech() {
 
       currentControl = control;
       clearTimer();
+      void unlockAudio();
 
       hoverTimer = window.setTimeout(() => {
-        if (isAssistantBusy(statusRef.current)) {
+        if (isMainSpeechActive()) {
           return;
         }
 
         const label = getSpeakableLabel(control);
-        if (label) {
-          cancelRecording();
-          stopBrowserRecognition();
-          speakHover(label, languageRef.current);
+        if (!label) {
+          return;
         }
+
+        cancelRecording();
+        stopBrowserRecognition();
+        speakHover(label, languageRef.current);
       }, HOVER_DELAY_MS);
     };
 

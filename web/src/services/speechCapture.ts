@@ -1,5 +1,6 @@
 import type { Language } from '../types';
 import {
+  delay,
   finishRecording,
   hasBrowserSpeechRecognition,
   hasVoiceActivity,
@@ -19,8 +20,32 @@ export function canRecognizeSpeech(language: Language) {
   return hasYandexCredentials();
 }
 
-export async function listenForCommand(language: Language, forLanguagePick = false) {
-  return transcribeListening(language, listenDurations.command, forLanguagePick, false);
+export async function listenForCommand(
+  language: Language,
+  forLanguagePick = false,
+  forExerciseAnswer = false,
+) {
+  if (forLanguagePick) {
+    return listenForLanguageChoice(language);
+  }
+
+  return transcribeListening(language, listenDurations.command, false, false, forExerciseAnswer);
+}
+
+export async function listenForLanguageChoice(language: Language) {
+  if (usesEnglishVoice(language) && hasBrowserSpeechRecognition()) {
+    await delay(700);
+    try {
+      const transcript = await recognizeWithBrowser(language, 5000, true);
+      if (transcript.trim()) {
+        return transcript;
+      }
+    } catch {
+      // Fall through to cloud STT.
+    }
+  }
+
+  return transcribeListening(language, listenDurations.command, true, false);
 }
 
 export function stopActiveListening() {
@@ -33,11 +58,16 @@ async function transcribeListening(
   durationMs: number,
   forLanguagePick: boolean,
   skipSilentCloud: boolean,
+  forExerciseAnswer = false,
 ) {
   const useEnglishCloud = usesEnglishVoice(language) && hasEnglishSttCredentials();
   const useYandexCloud = !usesEnglishVoice(language) && hasYandexCredentials();
 
   if (useEnglishCloud || useYandexCloud) {
+    if (forLanguagePick) {
+      await delay(900);
+    }
+
     const recording = await recordCommand();
 
     if (!recording) {
@@ -49,10 +79,13 @@ async function transcribeListening(
     }
 
     if (useEnglishCloud) {
-      return transcribeEnglish(recording, { detectLanguage: forLanguagePick });
+      return transcribeEnglish(recording, {
+        detectLanguage: forLanguagePick,
+        forExerciseAnswer,
+      });
     }
 
-    return recognizeSpeech(recording, language, forLanguagePick);
+    return recognizeSpeech(recording, language, forLanguagePick || forExerciseAnswer);
   }
 
   if (usesEnglishVoice(language) && hasBrowserSpeechRecognition()) {

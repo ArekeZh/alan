@@ -1,3 +1,5 @@
+import { interruptSpeechForNavigation } from '../utils/navigationSpeech';
+
 type AccessibleButtonProps = {
   label: string;
   onPress: () => void;
@@ -24,7 +26,10 @@ export function AccessibleButton({
       aria-label={label}
       title={accessibilityHint}
       disabled={disabled}
-      onClick={onPress}
+      onClick={() => {
+        interruptSpeechForNavigation();
+        onPress();
+      }}
     >
       {label}
     </button>

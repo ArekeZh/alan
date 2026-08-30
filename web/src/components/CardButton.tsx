@@ -1,3 +1,5 @@
+import { interruptSpeechForNavigation } from '../utils/navigationSpeech';
+
 type CardButtonProps = {
   title: string;
   description: string;
@@ -19,9 +21,13 @@ export function CardButton({
     <button
       type="button"
       className="card-button"
+      data-hover-speak
       aria-label={accessibilityLabel}
       title={accessibilityHint}
-      onClick={onPress}
+      onClick={() => {
+        interruptSpeechForNavigation();
+        onPress();
+      }}
     >
       <span className="card-button-text">
         <span className="card-button-title">{title}</span>

@@ -1,27 +1,32 @@
 import { useLocation } from 'react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getLesson, getLessonsForSection, getModule, getSection, getSectionsForModule, modules } from '../data/content';
+import { getLesson, getLessonsForSection, getModule, getSection, getSectionsForModule, lessonHasIntroVideo, modules } from '../data/content';
 import { useLanguage } from '../i18n/LanguageContext';
-import { delay, playAudioBytes, requestMicPermission, stopAllAudio } from '../services/audioSession';
+import { delay, requestMicPermission, stopAllAudio } from '../services/audioSession';
 import { usesEnglishVoice } from '../services/englishSpeech';
 import { playConfirmSound } from '../services/feedbackSound';
 import { canRecognizeSpeech, listenForCommand, stopActiveListening } from '../services/speechCapture';
-import { hasYandexCredentials, synthesizeSpeech } from '../services/yandexSpeech';
+import { hasYandexCredentials } from '../services/yandexSpeech';
 import type { Language } from '../types';
 import { buildExerciseAnnouncement, spokenNumber } from '../utils/exerciseSpeech';
 import { getModuleIdFromPath, getPageTitleAfterGoingBack, getSectionIdFromPath, pathId } from '../utils/pageTitle';
+import { LESSON_VIDEO_SEEK_SECONDS } from '../utils/youtube';
 import {
   getHoverEpoch,
   isHoverSpeechBlockingCommands,
   shouldIgnoreMicFromHover,
-  speakTextAsync,
+  speakMainVoice,
   stopSpeaking,
 } from '../utils/speech';
+import { registerNavigationInterrupt } from '../utils/navigationSpeech';
 import {
   interpretLessonCommand,
   interpretSectionCommand,
   interpretExerciseAnswer,
+  isBareLanguageName,
+  looksLikeLanguagePromptEcho,
+  parseLanguagePickAnswer,
   parseSpokenLanguage,
   wantsChangeLanguage,
   wantsGoBack,
@@ -30,6 +35,11 @@ import {
   wantsRepeat,
   wantsRetryLesson,
   wantsReturnToLessons,
+  wantsSeekBack,
+  wantsSeekForward,
+  wantsSkipToExercises,
+  wantsStopVideo,
+  wantsResumeVideo,
 } from '../utils/voiceCommands';
 import { useVoiceListening } from './useVoiceListening';
 
@@ -38,7 +48,6 @@ export type VoiceStatus = 'idle' | 'waiting' | 'speaking' | 'listening' | 'think
 export type ExerciseVoiceBridge = {
   lessonId: string;
   exerciseIndex: number;
-  options: number[];
   correctAnswer: number;
   showResult: boolean;
   isFinished: boolean;
@@ -46,7 +55,27 @@ export type ExerciseVoiceBridge = {
   repeatExercise: () => void | Promise<void>;
   retryLesson?: () => void | Promise<void>;
   finishLesson?: () => void | Promise<void>;
+  isWatchingIntro?: boolean;
+  skipIntro?: () => void | Promise<void>;
+  pauseIntro?: () => void;
+  resumeIntro?: () => void;
+  seekIntroBy?: (seconds: number) => void;
 };
+
+function isListeningForExerciseAnswer(
+  pathname: string,
+  bridge: ExerciseVoiceBridge | null,
+) {
+  const lessonId = pathId(pathname, 'lesson');
+  return Boolean(
+    lessonId &&
+      bridge &&
+      bridge.lessonId === lessonId &&
+      !bridge.isFinished &&
+      !bridge.showResult &&
+      !bridge.isWatchingIntro,
+  );
+}
 
 type UseVoiceAssistantOptions = {
   greeting: string;
@@ -67,7 +96,7 @@ function getModuleEnteredSpeech(pathname: string, t: Translate) {
   }
 
   return t('voice.enteredModule', {
-    module: t(`${module.translationKey}.title`),
+    module: module.title,
   });
 }
 
@@ -79,14 +108,14 @@ function getSectionEnteredSpeech(pathname: string, t: Translate) {
   }
 
   return t('voice.enteredSection', {
-    section: t(`${section.translationKey}.title`),
+    section: section.title,
   });
 }
 
-function getSpokenSectionOptions(moduleId: string, t: Translate) {
+function getSpokenSectionOptions(moduleId: string, _t: Translate) {
   return getSectionsForModule(moduleId).map((section) => ({
     id: section.id,
-    names: [t(`${section.translationKey}.title`), ...section.voiceAliases],
+    names: [section.title, ...section.voiceAliases],
   }));
 }
 
@@ -95,16 +124,16 @@ function buildSectionListSpeech(moduleId: string, t: Translate) {
     .map((section, index) =>
       t('voice.sectionListItem', {
         ordinal: t(`voice.ordinal.${index + 1}`),
-        name: t(`${section.translationKey}.title`),
+        name: section.title,
       }),
     )
     .join(', ');
 }
 
-function getSpokenLessonOptions(sectionId: string, t: Translate) {
+function getSpokenLessonOptions(sectionId: string, _t: Translate) {
   return getLessonsForSection(sectionId).map((lesson) => ({
     id: lesson.id,
-    names: [t(`${lesson.translationKey}.title`)],
+    names: [lesson.title],
   }));
 }
 
@@ -113,13 +142,17 @@ function buildLessonListSpeech(sectionId: string, t: Translate) {
     .map((lesson, index) =>
       t('voice.lessonListItem', {
         ordinal: t(`voice.ordinal.${index + 1}`),
-        name: t(`${lesson.translationKey}.title`),
+        name: lesson.title,
       }),
     )
     .join(', ');
 }
 
-function getNotUnderstoodKey(pathname: string) {
+function getNotUnderstoodKey(pathname: string, isWatchingIntro: boolean) {
+  if (pathId(pathname, 'lesson') && isWatchingIntro) {
+    return 'voice.didNotUnderstandOnLessonVideo';
+  }
+
   if (pathId(pathname, 'lesson')) {
     return 'voice.didNotUnderstandOnLesson';
   }
@@ -173,6 +206,7 @@ export function useVoiceAssistant({
   const startListeningRef = useRef<() => Promise<void>>(async () => {});
   const toggleTalkRef = useRef<() => void>(() => {});
   const followUpWaitRef = useRef<((started: boolean) => void) | null>(null);
+  const awaitingLanguagePickRef = useRef(false);
   const actOnCommandRef = useRef<(spoken: string, session: number) => Promise<boolean>>(
     async () => false,
   );
@@ -192,15 +226,7 @@ export function useVoiceAssistant({
   const isCurrent = useCallback((session: number) => session === sessionRef.current, []);
 
   const speak = useCallback(async (text: string, languageToUse: Language) => {
-    await stopSpeaking();
-
-    if (usesEnglishVoice(languageToUse)) {
-      await speakTextAsync(text, languageToUse);
-      return;
-    }
-
-    const audio = await synthesizeSpeech(text, languageToUse);
-    await playAudioBytes(audio);
+    await speakMainVoice(text, languageToUse);
   }, []);
 
   const announceExercise = useCallback(
@@ -244,26 +270,54 @@ export function useVoiceAssistant({
     [isCurrent],
   );
 
+  const applyLanguageFromVoice = async (nextLanguage: Language, session: number) => {
+    awaitingLanguagePickRef.current = false;
+
+    const isSameLanguage = nextLanguage === languageRef.current;
+    if (isSameLanguage) {
+      setStatus('speaking');
+      await speak(tRef.current('voice.alreadyThisLanguage'), languageRef.current);
+      resumeWaiting(session);
+      return true;
+    }
+
+    setLanguageRef.current(nextLanguage);
+    setStatus('speaking');
+    return true;
+  };
+
   const listenFollowUpRef = useRef<
     (session: number, forLanguagePick: boolean) => Promise<string | null>
   >(async () => null);
 
   listenFollowUpRef.current = async (session, forLanguagePick) => {
-    setStatus('waiting');
-    const started = await new Promise<boolean>((resolve) => {
-      followUpWaitRef.current = (value) => {
-        followUpWaitRef.current = null;
-        resolve(value);
-      };
-    });
-    if (!started || !isCurrent(session)) {
-      return null;
+    if (!forLanguagePick) {
+      setStatus('waiting');
+      const started = await new Promise<boolean>((resolve) => {
+        followUpWaitRef.current = (value) => {
+          followUpWaitRef.current = null;
+          resolve(value);
+        };
+      });
+      if (!started || !isCurrent(session)) {
+        return null;
+      }
     }
 
     setStatus('listening');
-    playConfirmSound();
+    if (!forLanguagePick) {
+      playConfirmSound();
+    }
     const hoverEpochBefore = getHoverEpoch();
-    const spoken = await listenForCommand(languageRef.current, forLanguagePick);
+    const forExerciseAnswer = isListeningForExerciseAnswer(
+      pathnameRef.current,
+      exerciseBridgeRef.current,
+    );
+    const spoken = await listenForCommand(
+      languageRef.current,
+      forLanguagePick,
+      forExerciseAnswer,
+    );
     if (!isCurrent(session)) {
       return null;
     }
@@ -281,50 +335,79 @@ export function useVoiceAssistant({
       return false;
     }
 
+    if (awaitingLanguagePickRef.current || isBareLanguageName(spoken)) {
+      setTranscript(spoken);
+      playConfirmSound();
+
+      const chosenLanguage = parseLanguagePickAnswer(spoken);
+      if (chosenLanguage) {
+        return applyLanguageFromVoice(chosenLanguage, session);
+      }
+
+      if (awaitingLanguagePickRef.current) {
+        awaitingLanguagePickRef.current = true;
+        setStatus('speaking');
+        await speak(tRef.current('voice.didNotUnderstandLanguage'), languageRef.current);
+        resumeWaiting(session);
+        return true;
+      }
+    }
+
     if (wantsChangeLanguage(spoken)) {
       setTranscript(spoken);
       playConfirmSound();
 
-      const applyLanguageChoice = async (nextLanguage: Language) => {
-        const isSameLanguage = nextLanguage === languageRef.current;
-        if (isSameLanguage) {
-          setStatus('speaking');
-          await speak(tRef.current('voice.alreadyThisLanguage'), languageRef.current);
-          resumeWaiting(session);
-          return true;
-        }
-
-        setLanguageRef.current(nextLanguage);
-        return true;
-      };
-
       const namedInCommand = parseSpokenLanguage(spoken);
       if (namedInCommand) {
-        return applyLanguageChoice(namedInCommand);
+        return applyLanguageFromVoice(namedInCommand, session);
       }
 
       setStatus('speaking');
+      awaitingLanguagePickRef.current = true;
       await speak(tRef.current('voice.askWhichLanguage'), languageRef.current);
       if (!isCurrent(session)) {
+        awaitingLanguagePickRef.current = false;
         return true;
       }
 
-      await delay(400);
-      const answer = await listenFollowUpRef.current(session, true);
+      await delay(800);
+      let answer = await listenFollowUpRef.current(session, true);
       if (answer === null || !isCurrent(session)) {
+        awaitingLanguagePickRef.current = false;
+        return true;
+      }
+
+      let chosenLanguage = answer.trim() ? parseLanguagePickAnswer(answer) : null;
+      const shouldRetryLanguagePick =
+        answer.trim() &&
+        !chosenLanguage &&
+        (looksLikeLanguagePromptEcho(answer) || answer.trim().split(/\s+/).length <= 2);
+
+      if (shouldRetryLanguagePick && isCurrent(session)) {
+        await delay(500);
+        const retryAnswer = await listenFollowUpRef.current(session, true);
+        if (retryAnswer && isCurrent(session)) {
+          answer = retryAnswer;
+          chosenLanguage = parseLanguagePickAnswer(retryAnswer);
+        }
+      }
+
+      if (!answer.trim()) {
+        awaitingLanguagePickRef.current = true;
+        resumeWaiting(session);
         return true;
       }
 
       setTranscript(answer);
-      const chosenLanguage = parseSpokenLanguage(answer);
       if (!chosenLanguage) {
+        awaitingLanguagePickRef.current = true;
         setStatus('speaking');
         await speak(tRef.current('voice.didNotUnderstandLanguage'), languageRef.current);
         resumeWaiting(session);
         return true;
       }
 
-      return applyLanguageChoice(chosenLanguage);
+      return applyLanguageFromVoice(chosenLanguage, session);
     }
 
     if (wantsOpenFirstModule(spoken)) {
@@ -341,7 +424,7 @@ export function useVoiceAssistant({
       const firstModule = modules[0];
       const enteredSpeech = firstModule
         ? tRef.current('voice.enteredModule', {
-            module: tRef.current(`${firstModule.translationKey}.title`),
+            module: firstModule.title,
           })
         : tRef.current('voice.openingModule');
       await speak(enteredSpeech, languageRef.current);
@@ -412,9 +495,17 @@ export function useVoiceAssistant({
       if (lessonCommand.kind === 'match') {
         setTranscript(spoken);
         playConfirmSound();
+        openLessonRef.current(lessonCommand.id);
+
+        if (lessonHasIntroVideo(getLesson(lessonCommand.id))) {
+          if (isCurrent(session)) {
+            resumeWaiting(session);
+          }
+          return true;
+        }
+
         statusRef.current = 'speaking';
         setStatus('speaking');
-        openLessonRef.current(lessonCommand.id);
         await delay(400);
         if (!isCurrent(session)) {
           return true;
@@ -440,6 +531,67 @@ export function useVoiceAssistant({
 
     const lessonId = pathId(pathnameRef.current, 'lesson');
     const exerciseBridge = exerciseBridgeRef.current;
+
+    if (lessonId && exerciseBridge && exerciseBridge.lessonId === lessonId && exerciseBridge.isWatchingIntro) {
+      setTranscript(spoken);
+
+      if (wantsStopVideo(spoken) && exerciseBridge.pauseIntro) {
+        playConfirmSound();
+        exerciseBridge.pauseIntro();
+        if (isCurrent(session)) {
+          resumeWaiting(session);
+        }
+        return true;
+      }
+
+      if (wantsResumeVideo(spoken) && exerciseBridge.resumeIntro) {
+        playConfirmSound();
+        exerciseBridge.resumeIntro();
+        if (isCurrent(session)) {
+          resumeWaiting(session);
+        }
+        return true;
+      }
+
+      if (wantsSeekForward(spoken) && exerciseBridge.seekIntroBy) {
+        playConfirmSound();
+        exerciseBridge.seekIntroBy(LESSON_VIDEO_SEEK_SECONDS);
+        if (isCurrent(session)) {
+          resumeWaiting(session);
+        }
+        return true;
+      }
+
+      if (wantsSeekBack(spoken) && exerciseBridge.seekIntroBy) {
+        playConfirmSound();
+        exerciseBridge.seekIntroBy(-LESSON_VIDEO_SEEK_SECONDS);
+        if (isCurrent(session)) {
+          resumeWaiting(session);
+        }
+        return true;
+      }
+
+      if (wantsSkipToExercises(spoken) && exerciseBridge.skipIntro) {
+        playConfirmSound();
+        setStatus('speaking');
+        await exerciseBridge.skipIntro();
+        if (isCurrent(session)) {
+          resumeWaiting(session);
+        }
+        return true;
+      }
+
+      if (wantsGoBack(spoken)) {
+        return false;
+      }
+
+      setStatus('speaking');
+      await speak(tRef.current('voice.didNotUnderstandOnLessonVideo'), languageRef.current);
+      if (isCurrent(session)) {
+        resumeWaiting(session);
+      }
+      return true;
+    }
 
     if (lessonId && exerciseBridge && exerciseBridge.lessonId === lessonId && exerciseBridge.isFinished) {
       setTranscript(spoken);
@@ -500,10 +652,7 @@ export function useVoiceAssistant({
           ? spokenNumber(parsedAnswer, tRef.current)
           : spoken.trim();
 
-      const isCorrect =
-        parsedAnswer !== null &&
-        exerciseBridge.options.includes(parsedAnswer) &&
-        parsedAnswer === exerciseBridge.correctAnswer;
+      const isCorrect = parsedAnswer !== null && parsedAnswer === exerciseBridge.correctAnswer;
 
       if (!isCorrect) {
         setStatus('speaking');
@@ -554,7 +703,7 @@ export function useVoiceAssistant({
       await delay(300);
       await speak(
         tRef.current('voice.enteredSection', {
-          section: tRef.current(`${sectionAfterBack.translationKey}.title`),
+          section: sectionAfterBack.title,
         }),
         languageRef.current,
       );
@@ -567,7 +716,7 @@ export function useVoiceAssistant({
       await delay(300);
       await speak(
         tRef.current('voice.enteredModule', {
-          module: tRef.current(`${moduleAfterBack.translationKey}.title`),
+          module: moduleAfterBack.title,
         }),
         languageRef.current,
       );
@@ -585,7 +734,9 @@ export function useVoiceAssistant({
     followUpWaitRef.current?.(false);
     followUpWaitRef.current = null;
     const session = ++sessionRef.current;
-    setTranscript('');
+    if (!awaitingLanguagePickRef.current) {
+      setTranscript('');
+    }
 
     const micGranted = await requestMicPermission();
     if (!isCurrent(session)) {
@@ -606,7 +757,15 @@ export function useVoiceAssistant({
 
     try {
       const hoverEpochBefore = getHoverEpoch();
-      const spoken = await listenForCommand(languageRef.current);
+      const forExerciseAnswer = isListeningForExerciseAnswer(
+        pathnameRef.current,
+        exerciseBridgeRef.current,
+      );
+      const spoken = await listenForCommand(
+        languageRef.current,
+        false,
+        forExerciseAnswer,
+      );
       if (!isCurrent(session)) {
         return;
       }
@@ -629,7 +788,10 @@ export function useVoiceAssistant({
 
       setTranscript(spoken);
       setStatus('speaking');
-      const notUnderstoodKey = getNotUnderstoodKey(pathnameRef.current);
+      const notUnderstoodKey = getNotUnderstoodKey(
+        pathnameRef.current,
+        Boolean(exerciseBridgeRef.current?.isWatchingIntro),
+      );
       await speak(tRef.current(notUnderstoodKey), languageRef.current);
       resumeWaiting(session);
     } catch (error) {
@@ -780,16 +942,49 @@ export function useVoiceAssistant({
   }, [appActive, enabled, englishVoice, language, recognitionAvailable]);
 
   useEffect(() => {
+    registerNavigationInterrupt(() => {
+      followUpWaitRef.current?.(false);
+      followUpWaitRef.current = null;
+      sessionRef.current += 1;
+      stopSpeaking();
+    });
+
+    return () => {
+      registerNavigationInterrupt(() => {});
+    };
+  }, []);
+
+  useEffect(() => {
     const previousPath = previousPathnameRef.current;
     previousPathnameRef.current = pathname;
 
-    if (previousPath === null) {
+    if (previousPath === null || previousPath === pathname) {
       return;
     }
 
-    const isVoiceNavigating =
-      statusRef.current === 'speaking' || statusRef.current === 'thinking';
-    if (!hasGreetedRef.current || isVoiceNavigating) {
+    if (!hasGreetedRef.current) {
+      return;
+    }
+
+    followUpWaitRef.current?.(false);
+    followUpWaitRef.current = null;
+    const session = ++sessionRef.current;
+    void stopAllAudio();
+    stopSpeaking();
+
+    const arrivedAtHome = pathname === '/' && previousPath !== '/';
+    if (arrivedAtHome) {
+      const homeSpeech = tRef.current('voice.nowOnPage', {
+        page: tRef.current('voice.homePageName'),
+      });
+
+      void (async () => {
+        setStatus('speaking');
+        await speak(homeSpeech, languageRef.current);
+        if (isCurrent(session)) {
+          resumeWaiting(session);
+        }
+      })();
       return;
     }
 
@@ -803,7 +998,6 @@ export function useVoiceAssistant({
         return;
       }
 
-      const session = ++sessionRef.current;
       statusRef.current = 'speaking';
 
       void (async () => {
@@ -826,7 +1020,6 @@ export function useVoiceAssistant({
         return;
       }
 
-      const session = ++sessionRef.current;
       statusRef.current = 'speaking';
 
       void (async () => {
@@ -847,7 +1040,11 @@ export function useVoiceAssistant({
       return;
     }
 
-    const session = ++sessionRef.current;
+    if (lessonHasIntroVideo(getLesson(currentLessonId))) {
+      resumeWaiting(session);
+      return;
+    }
+
     statusRef.current = 'speaking';
 
     void (async () => {

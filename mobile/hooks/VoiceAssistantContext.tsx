@@ -34,7 +34,7 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   const firstModule = modules[0];
   const lastModule = lastOpenedModuleId ? getModule(lastOpenedModuleId) : undefined;
   const progressModule = lastModule ?? firstModule;
-  const progressModuleTitle = t(`${progressModule.translationKey}.title`);
+  const progressModuleTitle = progressModule?.title ?? '';
 
   const greeting = useMemo(() => {
     const progressLine = lastModule
@@ -45,8 +45,11 @@ export function VoiceAssistantProvider({ children }: { children: ReactNode }) {
   }, [lastModule, progressModuleTitle, t]);
 
   const onOpenFirstModule = useCallback(() => {
+    if (!firstModule) {
+      return;
+    }
     router.push(`/module/${firstModule.id}`);
-  }, [firstModule.id]);
+  }, [firstModule]);
 
   const onOpenSection = useCallback((sectionId: string) => {
     router.push(`/section/${sectionId}`);
